@@ -54,7 +54,8 @@ function pointsForHex(w: number, h: number) {
 }
 
 type TileAnim = {
-  scale: Animated.Value;
+  scale: Animated.Value;     // FX용(pop/pulse/burst)
+  selScale: Animated.Value;  // ✅ 선택용(유지)
   opacity: Animated.Value;
   tx: Animated.Value;
 };
@@ -68,7 +69,8 @@ export default function App() {
 
   const [sum, setSum] = useState(0);
   const [message, setMessage] = useState("");
-  const [messageClass, setMessageClass] = useState<"slate" | "red" | "orange" | "blue" | "green" | "purple">("slate");
+  const [messageClass, setMessageClass] =
+    useState<"slate" | "red" | "orange" | "blue" | "green" | "purple">("slate");
 
   const [startOverlayVisible, setStartOverlayVisible] = useState(true);
   const [gameOverVisible, setGameOverVisible] = useState(false);
@@ -83,11 +85,14 @@ export default function App() {
   const hexPoints = useMemo(() => pointsForHex(HEX_W, HEX_H), []);
 
   const animsRef = useRef<Record<string, TileAnim>>({});
+  const [burstIds, setBurstIds] = useState<Record<string, true>>({});
+  const [penaltyIds, setPenaltyIds] = useState<Record<string, true>>({});
 
   function ensureAnim(id: string) {
     if (!animsRef.current[id]) {
       animsRef.current[id] = {
         scale: new Animated.Value(1),
+        selScale: new Animated.Value(1),
         opacity: new Animated.Value(1),
         tx: new Animated.Value(0),
       };
@@ -95,8 +100,29 @@ export default function App() {
     return animsRef.current[id];
   }
 
+  function animateSelectIn(id: string) {
+    const a = ensureAnim(id);
+    a.selScale.stopAnimation();
+    Animated.timing(a.selScale, {
+      toValue: 1.08,
+      duration: 150,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }
+
+  function animateSelectOut(id: string) {
+    const a = ensureAnim(id);
+    a.selScale.stopAnimation();
+    Animated.timing(a.selScale, {
+      toValue: 1,
+      duration: 150,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }
+
   function getSpawnSpeed(lv: number) {
-    // return Math.max(1300, (5000 - (level - 1) * 400) * 0.85);
     return Math.max(1300, (5000 - (lv - 1) * 400) * 0.85);
   }
 
@@ -169,12 +195,18 @@ export default function App() {
     }
   }
 
+  function clearSelectionWithAnim(coords: Coord[]) {
+    coords.forEach((c) => animateSelectOut(idOf(c.r, c.c)));
+    setSelectedCoords([]);
+    setSum(0);
+  }
+
   function resetSelection(curSelected: Coord[]) {
     curSelected.forEach((coord) => {
       const id = idOf(coord.r, coord.c);
       const a = ensureAnim(id);
       a.tx.setValue(0);
-      // selected/penalty 스타일은 렌더링에서 selectedCoords로 처리
+      animateSelectOut(id);
     });
     setSelectedCoords([]);
     setSum(0);
@@ -218,28 +250,61 @@ export default function App() {
   }
 
   function animateBurst(ids: string[]) {
+    setBurstIds((prev) => {
+      const next = { ...prev };
+      ids.forEach((id) => (next[id] = true));
+      return next;
+    });
+
     ids.forEach((id) => {
       const a = ensureAnim(id);
+
       a.scale.stopAnimation();
       a.opacity.stopAnimation();
+
+      // keyframes 0%: scale(1.1), opacity 1
       a.scale.setValue(1.1);
       a.opacity.setValue(1);
+
+      // keyframes 40%: scale(1.5), opacity 0.8
       Animated.parallel([
         Animated.timing(a.scale, {
-          toValue: 0,
-          duration: 500,
-          easing: Easing.out(Easing.cubic),
+          toValue: 1.5,
+          duration: 200,
+          easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(a.opacity, {
-          toValue: 0,
-          duration: 500,
+          toValue: 0.8,
+          duration: 200,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
       ]).start(() => {
-        a.scale.setValue(1);
-        a.opacity.setValue(1);
+        // keyframes 100%: scale(0), opacity 0
+        Animated.parallel([
+          Animated.timing(a.scale, {
+            toValue: 0,
+            duration: 300,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(a.opacity, {
+            toValue: 0,
+            duration: 300,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          a.scale.setValue(1);
+          a.opacity.setValue(1);
+
+          setBurstIds((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        });
       });
     });
   }
@@ -256,7 +321,6 @@ export default function App() {
         const [r, c] = k.split(",").map(Number);
         const val = Math.floor(Math.random() * 9) + 1;
         next[k] = val;
-
         animatePop(idOf(r, c));
       }
       return next;
@@ -277,6 +341,9 @@ export default function App() {
   function burstTiles(pairSnapshot: [Coord, Coord]) {
     if (!isValidPair(pairSnapshot)) return;
 
+    // 선택 유지 스케일 끄기 (HTML처럼 burst가 우선)
+    clearSelectionWithAnim(pairSnapshot);
+
     const ids = pairSnapshot.map((c) => idOf(c.r, c.c));
     animateBurst(ids);
 
@@ -285,8 +352,6 @@ export default function App() {
     updateLevel(nextScore);
 
     showMessage("GREAT! 10 성공!", "green");
-    setSelectedCoords([]);
-    setSum(0);
 
     setTimeout(() => {
       setTileData((prev) => {
@@ -294,8 +359,6 @@ export default function App() {
         pairSnapshot.forEach((c) => {
           next[keyOf(c.r, c.c)] = null;
         });
-        // 10 정확히: 추가 숫자 생성 없음
-        // checkBoardStatus
         setTimeout(() => checkBoardStatus(next), 0);
         return next;
       });
@@ -304,6 +367,8 @@ export default function App() {
 
   function processOverTen(pairSnapshot: [Coord, Coord]) {
     if (!isValidPair(pairSnapshot)) return;
+
+    clearSelectionWithAnim(pairSnapshot);
 
     setTileData((prev) => {
       const src = pairSnapshot[0];
@@ -314,20 +379,12 @@ export default function App() {
       const remainder = v1 + v2 - 10;
 
       const next: TileMap = { ...prev };
-
-      // src 제거
       next[keyOf(src.r, src.c)] = null;
-
-      // dst에 초과분 남김
       next[keyOf(dst.r, dst.c)] = remainder;
 
       animatePulse(idOf(dst.r, dst.c));
-
       return next;
     });
-
-    setSelectedCoords([]);
-    setSum(0);
 
     spawnNumbers(1);
     setTimeout(() => {
@@ -341,26 +398,20 @@ export default function App() {
   function processUnderTen(pairSnapshot: [Coord, Coord]) {
     if (!isValidPair(pairSnapshot)) return;
 
+    clearSelectionWithAnim(pairSnapshot);
+
     setTileData((prev) => {
       const v1 = prev[keyOf(pairSnapshot[0].r, pairSnapshot[0].c)] ?? 0;
       const v2 = prev[keyOf(pairSnapshot[1].r, pairSnapshot[1].c)] ?? 0;
       const newValue = v1 + v2;
 
       const next: TileMap = { ...prev };
-
-      // key1 null
       next[keyOf(pairSnapshot[0].r, pairSnapshot[0].c)] = null;
-
-      // key2 newValue
       next[keyOf(pairSnapshot[1].r, pairSnapshot[1].c)] = newValue;
 
       animatePulse(idOf(pairSnapshot[1].r, pairSnapshot[1].c));
-
       return next;
     });
-
-    setSelectedCoords([]);
-    setSum(0);
 
     spawnNumbers(1);
     setTimeout(() => {
@@ -389,10 +440,10 @@ export default function App() {
     ROW_COUNTS.forEach((count, r) => {
       for (let c = 0; c < count; c++) {
         base[keyOf(r, c)] = null;
-        ensureAnim(idOf(r, c));
-        // reset anim values
-        const a = ensureAnim(idOf(r, c));
+        const id = idOf(r, c);
+        const a = ensureAnim(id);
         a.scale.setValue(1);
+        a.selScale.setValue(1);
         a.opacity.setValue(1);
         a.tx.setValue(0);
       }
@@ -400,7 +451,6 @@ export default function App() {
 
     setTileData(base);
 
-    // spawnNumbers(8) after state set
     setTimeout(() => spawnNumbers(8), 0);
 
     lastTsRef.current = (global as any)?.performance?.now?.() ?? Date.now();
@@ -421,7 +471,6 @@ export default function App() {
           setTileData((prev) => {
             const emptyCount = Object.values(prev).filter((v) => v === null).length;
             if (emptyCount > 0) {
-              // spawn 1 and check
               const emptyKeys = Object.keys(prev).filter((k) => prev[k] === null);
               const shuffled = [...emptyKeys].sort(() => 0.5 - Math.random());
               const pick = shuffled[0];
@@ -430,8 +479,6 @@ export default function App() {
 
               const nextMap: TileMap = { ...prev, [pick]: val };
               animatePop(idOf(r, c));
-
-              // checkBoardStatus
               setTimeout(() => checkBoardStatus(nextMap), 0);
               return nextMap;
             } else {
@@ -460,17 +507,26 @@ export default function App() {
     const v = tileData[k];
     if (v === null) return;
 
+    const id = idOf(r, c);
+
     const existingIdx = selectedCoords.findIndex((x) => x.r === r && x.c === c);
     if (existingIdx > -1) {
+      // ✅ 해제
+      animateSelectOut(id);
+
       const nextSel = [...selectedCoords];
       nextSel.splice(existingIdx, 1);
       setSelectedCoords(nextSel);
+
       const s = nextSel.reduce((acc, cc) => acc + (tileData[keyOf(cc.r, cc.c)] ?? 0), 0);
       setSum(s);
       return;
     }
 
     if (selectedCoords.length >= 2) return;
+
+    // ✅ 선택
+    animateSelectIn(id);
 
     const nextSel = [...selectedCoords, { r, c }];
     setSelectedCoords(nextSel);
@@ -492,8 +548,26 @@ export default function App() {
         burstTiles(pairSnapshot);
       } else if (currentSum > 10) {
         showMessage(`${currentSum} 초과! (합-10) 생성!`, "orange");
-        animateShake(pairSnapshot.map((p) => idOf(p.r, p.c)));
-        setTimeout(() => processOverTen(pairSnapshot), 600);
+
+        const ids = pairSnapshot.map((p) => idOf(p.r, p.c));
+        setPenaltyIds((prev) => {
+          const next = { ...prev };
+          ids.forEach((id) => (next[id] = true));
+          return next;
+        });
+
+        animateShake(ids);
+
+        setTimeout(() => {
+          setPenaltyIds((prev) => {
+            const next = { ...prev };
+            ids.forEach((id) => delete next[id]);
+            return next;
+          });
+          processOverTen(pairSnapshot);
+        }, 600);
+
+        return;
       } else {
         showMessage(`${currentSum} 미만! 숫자를 합칩니다.`, "blue");
         setTimeout(() => processUnderTen(pairSnapshot), 600);
@@ -551,46 +625,12 @@ export default function App() {
     return COLOR_TILE;
   }
 
-  function tileTextColor(r: number, c: number) {
-    const st = tileState(r, c);
-    if (st === "empty") return "transparent";
-    if (isSelected(r, c)) return "#ffffff";
-    return "#1e293b";
-  }
-
   function tileOpacity(r: number, c: number) {
     const st = tileState(r, c);
     return st === "empty" ? 0.5 : 1;
   }
 
-  function tileShadow(r: number, c: number) {
-    const st = tileState(r, c);
-    const sel = isSelected(r, c);
-    if (st === "empty") return null;
-
-    if (sel) {
-      return {
-        shadowColor: "rgba(59, 130, 246, 1)",
-        shadowOpacity: 0.6,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 0 },
-        elevation: 10,
-      };
-    }
-    return {
-      shadowColor: "rgba(0,0,0,1)",
-      shadowOpacity: 0.1,
-      shadowRadius: 2,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
-    };
-  }
-
-  function tileScaleFactor(r: number, c: number) {
-    const st = tileState(r, c);
-    const sel = isSelected(r, c);
-    if (st === "empty") return 1;
-    if (sel) return 1.1;
+  function tileScaleFactor() {
     return 1;
   }
 
@@ -598,7 +638,6 @@ export default function App() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.body}>
         <View style={styles.gameContainer}>
-          {/* Start Overlay */}
           {startOverlayVisible && (
             <View style={styles.startOverlay}>
               <Pressable onPress={startGame} style={({ pressed }) => [styles.startBtn, pressed && styles.startBtnPressed]}>
@@ -607,7 +646,6 @@ export default function App() {
             </View>
           )}
 
-          {/* Game Over Modal */}
           {gameOverVisible && (
             <View style={styles.gameOverModal}>
               <Text style={styles.gameOverTitle}>GAME OVER</Text>
@@ -621,7 +659,6 @@ export default function App() {
             </View>
           )}
 
-          {/* Score Board */}
           <View style={styles.scoreBoard}>
             <Text style={styles.title}>숫자 터트리기</Text>
 
@@ -634,7 +671,6 @@ export default function App() {
               </Text>
             </View>
 
-            {/* Auto Spawn Gauge */}
             <View style={styles.statusContainer}>
               <View style={styles.statusRow}>
                 <Text style={styles.statusLeft}>Next Tile Spawn</Text>
@@ -653,25 +689,36 @@ export default function App() {
             <Text style={[styles.message, msgColorStyle]}>{message}</Text>
           </View>
 
-          {/* Grid */}
           <View style={styles.gridContainer}>
             {ROW_COUNTS.map((count, r) => {
               return (
                 <View key={`row-${r}`} style={[styles.hexRow, r !== ROW_COUNTS.length - 1 && styles.hexRowOverlap]}>
                   {Array.from({ length: count }).map((_, c) => {
                     const id = idOf(r, c);
+
                     const a = ensureAnim(id);
                     const value = tileData[keyOf(r, c)];
                     const st = tileState(r, c);
                     const sel = isSelected(r, c);
 
-                    const baseScale = tileScaleFactor(r, c);
+                    const isPenalty = !!penaltyIds[id];
+                    const isBurst = !!burstIds[id];
 
-                    const shadow = tileShadow(r, c);
+                    const fill =
+                      isPenalty ? "#f97316" : // >10 주황
+                      isBurst ? "#10b981" :   // =10 초록
+                      tileFill(r, c);
+
+                    const textColor =
+                      st === "empty" ? "transparent" :
+                      isPenalty || isBurst ? "#ffffff" :
+                      sel ? "#ffffff" :
+                      "#1e293b";
+
+                    const baseScale = tileScaleFactor();
                     const wrapperStyle = [
                       styles.hexWrapper,
                       { opacity: tileOpacity(r, c) },
-                      shadow ?? null,
                     ];
 
                     return (
@@ -685,23 +732,35 @@ export default function App() {
                             style={{
                               transform: [
                                 { translateX: a.tx },
-                                { scale: Animated.multiply(a.scale, baseScale) },
+                                { scale: Animated.multiply(Animated.multiply(a.scale, a.selScale), baseScale) },
                               ],
                               opacity: a.opacity,
                             }}
                           >
                             <Svg width={HEX_W} height={HEX_H} style={styles.hexSvg}>
-                              <Polygon points={hexPoints} fill={tileFill(r, c)} />
+                              {/* ✅ 육각형 그림자 */}
+                              {st !== "empty" && !sel && (
+                                <Polygon
+                                  points={hexPoints}
+                                  fill="rgba(0,0,0,0.10)"
+                                  transform="translate(0,2)"
+                                />
+                              )}
+
+                              {/* ✅ 선택 글로우(육각형) */}
+                              {st !== "empty" && sel && (
+                                <Polygon
+                                  points={hexPoints}
+                                  fill="rgba(59,130,246,0.25)"
+                                  transform="translate(0,0)"
+                                />
+                              )}
+
+                              <Polygon points={hexPoints} fill={fill} />
                             </Svg>
 
                             <View style={styles.hexTextWrap}>
-                              <Text
-                                style={[
-                                  styles.hexText,
-                                  { color: tileTextColor(r, c) },
-                                  sel ? styles.hexTextSelected : null,
-                                ]}
-                              >
+                              <Text style={[styles.hexText, { color: textColor }, sel && styles.hexTextSelected]}>
                                 {value === null ? "" : String(value)}
                               </Text>
                             </View>
@@ -715,7 +774,6 @@ export default function App() {
             })}
           </View>
 
-          {/* Footer hint */}
           <View style={styles.footerWrap}>
             <Text style={styles.footerPill}>
               10 완성 시 빈 타일 추가 생성 없음! 보드를 비워 공간을 확보하세요.
@@ -740,7 +798,7 @@ const styles = StyleSheet.create({
     position: "relative",
     padding: 30,
     backgroundColor: "#ffffff",
-    borderRadius: 32, // 2rem
+    borderRadius: 32,
     maxWidth: "95%",
     ...Platform.select({
       ios: {
@@ -749,14 +807,11 @@ const styles = StyleSheet.create({
         shadowRadius: 25,
         shadowOffset: { width: 0, height: 12 },
       },
-      android: {
-        elevation: 10,
-      },
+      android: { elevation: 10 },
       default: {},
     }),
   },
 
-  // Start overlay
   startOverlay: {
     position: "absolute",
     top: 0, left: 0, right: 0, bottom: 0,
@@ -769,12 +824,12 @@ const styles = StyleSheet.create({
   startBtn: {
     paddingHorizontal: 40,
     paddingVertical: 16,
-    backgroundColor: "#2563eb", // blue-600
+    backgroundColor: "#2563eb",
     borderRadius: 24,
     transform: [{ scale: 1 }],
   },
   startBtnPressed: {
-    backgroundColor: "#1d4ed8", // blue-700
+    backgroundColor: "#1d4ed8",
     transform: [{ scale: 0.95 }],
   },
   startBtnText: {
@@ -784,7 +839,6 @@ const styles = StyleSheet.create({
     fontFamily: "Pretendard",
   },
 
-  // Game over modal
   gameOverModal: {
     position: "absolute",
     top: 0, left: 0, right: 0, bottom: 0,
@@ -799,12 +853,12 @@ const styles = StyleSheet.create({
   gameOverTitle: {
     fontSize: 36,
     fontWeight: "900",
-    color: "#ef4444", // red-500
+    color: "#ef4444",
     marginBottom: 8,
     fontFamily: "Pretendard",
   },
   gameOverReason: {
-    color: "#64748b", // slate-500
+    color: "#64748b",
     fontWeight: "700",
     marginBottom: 24,
     fontFamily: "Pretendard",
@@ -813,13 +867,10 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     marginBottom: 32,
-    color: "#334155", // slate-700
+    color: "#334155",
     fontFamily: "Pretendard",
   },
-  finalScoreNum: {
-    fontWeight: "900",
-    fontFamily: "Pretendard",
-  },
+  finalScoreNum: { fontWeight: "900", fontFamily: "Pretendard" },
   retryBtn: {
     paddingHorizontal: 32,
     paddingVertical: 12,
@@ -838,15 +889,11 @@ const styles = StyleSheet.create({
     fontFamily: "Pretendard",
   },
 
-  // Scoreboard
-  scoreBoard: {
-    alignItems: "center",
-    marginBottom: 10,
-  },
+  scoreBoard: { alignItems: "center", marginBottom: 10 },
   title: {
     fontSize: 30,
     fontWeight: "900",
-    color: "#1e293b", // slate-800
+    color: "#1e293b",
     marginBottom: 4,
     fontFamily: "Pretendard",
   },
@@ -860,30 +907,17 @@ const styles = StyleSheet.create({
   topRowText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#64748b", // slate-500
+    color: "#64748b",
     fontFamily: "Pretendard",
   },
-  scoreBlue: {
-    color: "#2563eb",
-    fontWeight: "900",
-    fontFamily: "Pretendard",
-  },
+  scoreBlue: { color: "#2563eb", fontWeight: "900", fontFamily: "Pretendard" },
 
-  // Status
-  statusContainer: {
-    width: "100%",
-    marginTop: 8,
-    marginBottom: 0,
-  },
-  statusRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 5,
-  },
+  statusContainer: { width: "100%", marginTop: 8, marginBottom: 0 },
+  statusRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
   statusLeft: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#94a3b8", // slate-400
+    color: "#94a3b8",
     textTransform: "uppercase",
     letterSpacing: -0.5,
     fontFamily: "Pretendard",
@@ -903,12 +937,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: "hidden",
   },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#3b82f6",
-  },
+  progressBarFill: { height: "100%", backgroundColor: "#3b82f6" },
 
-  // Sum
   sumRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -917,7 +947,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   sumDisplay: {
-    color: "#f97316", // orange-500
+    color: "#f97316",
     fontSize: 36,
     fontWeight: "900",
     fontFamily: "Pretendard",
@@ -929,7 +959,6 @@ const styles = StyleSheet.create({
     fontFamily: "Pretendard",
   },
 
-  // Message (height fixed 24px like HTML)
   message: {
     marginTop: 12,
     height: 24,
@@ -944,7 +973,6 @@ const styles = StyleSheet.create({
   msgGreen: { color: "#16a34a" },
   msgPurple: { color: "#9333ea", transform: [{ scale: 1.1 }] },
 
-  // Grid container
   gridContainer: {
     alignItems: "center",
     gap: 2 as any,
@@ -954,26 +982,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: "visible",
   },
-  hexRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    columnGap: HEX_GAP,
-  },
-  hexRowOverlap: {
-    marginBottom: -20,
-  },
-  hexWrapper: {
-    width: HEX_W,
-    height: HEX_H,
-  },
-  hexPress: {
-    width: HEX_W,
-    height: HEX_H,
-  },
-  hexSvg: {
-    width: HEX_W,
-    height: HEX_H,
-  },
+  hexRow: { flexDirection: "row", justifyContent: "center", columnGap: HEX_GAP },
+  hexRowOverlap: { marginBottom: -16 }, //세로 행 마진
+  hexWrapper: { width: HEX_W, height: HEX_H },
+  hexPress: { width: HEX_W, height: HEX_H },
+  hexSvg: { width: HEX_W, height: HEX_H },
   hexTextWrap: {
     position: "absolute",
     left: 0, top: 0, right: 0, bottom: 0,
@@ -981,22 +994,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   hexText: {
-    fontSize: 26, // 1.6rem approx
+    fontSize: 26,
     fontWeight: "900",
     fontFamily: "Pretendard",
     includeFontPadding: false,
     textAlignVertical: "center",
   },
-  hexTextSelected: {
-    color: "#fff",
-  },
+  hexTextSelected: { color: "#fff" },
 
-  // Footer
-  footerWrap: {
-    marginTop: 32,
-    alignItems: "center",
-    gap: 16 as any,
-  },
+  footerWrap: { marginTop: 32, alignItems: "center", gap: 16 as any },
   footerPill: {
     fontSize: 11,
     color: "#64748b",
