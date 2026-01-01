@@ -1,496 +1,472 @@
-// app/index.tsx
+// App.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
+  SafeAreaView,
+  Platform,
   Animated,
   Easing,
-  Dimensions,
 } from "react-native";
-import Svg, {
-  Defs,
-  Filter,
-  FeDropShadow,
-  Polygon,
-  Text as SvgText,
-} from "react-native-svg";
+import Svg, { Polygon } from "react-native-svg";
 
 type Coord = { r: number; c: number };
-type TileValue = number | null;
-type TileData = Record<string, TileValue>;
-type MsgStyle = { color: string; weight?: "700" | "800" | "900"; scale?: number };
+type TileMap = Record<string, number | null>;
 
 const ROW_COUNTS = [5, 6, 5, 6, 5];
 
-// 육각형 커스텀
+// :root CSS vars
 const HEX_W = 70;
-const HEX_H = 92; 
+const HEX_H = 80;
 const HEX_GAP = 8;
 
-// colors (HTML과 맞춤)
-const COLOR_BG = "#e2e8f0";
-const COLOR_CONTAINER = "#ffffff";
-const COLOR_BG_GRID = "#f8fafc";
 const COLOR_TILE = "#cbd5e1";
 const COLOR_EMPTY = "#e2e8f0";
-const COLOR_SELECTED = "#3b82f6";
-const COLOR_PENALTY = "#f97316";
-const COLOR_BURST = "#10b981";
-const COLOR_TEXT_DARK = "#1e293b";
-const COLOR_TEXT_MUTED = "#64748b";
+const COLOR_BG_GRID = "#f8fafc";
 
-const HEX_POINTS = "50,0 100,25 100,75 50,100 0,75 0,25";
-
-const keyOf = (r: number, c: number) => `${r},${c}`;
-const randInt = (min: number, max: number) =>
-  Math.floor(Math.random() * (max - min + 1)) + min;
+function keyOf(r: number, c: number) {
+  return `${r},${c}`;
+}
+function idOf(r: number, c: number) {
+  return `hex-${r}-${c}`;
+}
 
 function isValidCoord(c: any): c is Coord {
   return !!c && Number.isInteger(c.r) && Number.isInteger(c.c);
 }
 function isValidPair(coords: any): coords is [Coord, Coord] {
-  return (
-    Array.isArray(coords) &&
-    coords.length === 2 &&
-    isValidCoord(coords[0]) &&
-    isValidCoord(coords[1])
-  );
+  return Array.isArray(coords) && coords.length === 2 && isValidCoord(coords[0]) && isValidCoord(coords[1]);
 }
 
-export default function Index() {
-  const [started, setStarted] = useState(false);
+function pointsForHex(w: number, h: number) {
+  // CSS clip-path polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)
+  const p = [
+    [w * 0.5, h * 0.0],
+    [w * 1.0, h * 0.25],
+    [w * 1.0, h * 0.75],
+    [w * 0.5, h * 1.0],
+    [w * 0.0, h * 0.75],
+    [w * 0.0, h * 0.25],
+  ];
+  return p.map(([x, y]) => `${x},${y}`).join(" ");
+}
 
+type TileAnim = {
+  scale: Animated.Value;
+  opacity: Animated.Value;
+  tx: Animated.Value;
+};
+
+export default function App() {
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
 
-  const [tileData, setTileData] = useState<TileData>({});
   const [selectedCoords, setSelectedCoords] = useState<Coord[]>([]);
+  const [tileData, setTileData] = useState<TileMap>({});
+
   const [sum, setSum] = useState(0);
-
   const [message, setMessage] = useState("");
-  const [messageStyle, setMessageStyle] = useState<MsgStyle>({
-    color: COLOR_TEXT_MUTED,
-    weight: "800",
-  });
+  const [messageClass, setMessageClass] = useState<"slate" | "red" | "orange" | "blue" | "green" | "purple">("slate");
 
+  const [startOverlayVisible, setStartOverlayVisible] = useState(true);
   const [gameOverVisible, setGameOverVisible] = useState(false);
-  const [gameOverReason, setGameOverReason] = useState(
-    "더 이상 연결할 수 있는 이웃 타일이 없습니다!"
-  );
+  const [gameOverReason, setGameOverReason] = useState("더 이상 연결할 수 있는 이웃 타일이 없습니다!");
 
-  // spawn gauge
-  const spawnProgress = useRef(0);
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const [spawnProgress, setSpawnProgress] = useState(0); // 0..100
+  const [spawnSpeedText, setSpawnSpeedText] = useState("Normal");
 
-  const rafId = useRef<number | null>(null);
-  const lastTs = useRef<number>(0);
+  const rafIdRef = useRef<number | null>(null);
+  const lastTsRef = useRef<number>(0);
 
-  // per-tile anim values
-  const scaleMap = useRef<Record<string, Animated.Value>>({});
-  const shakeMap = useRef<Record<string, Animated.Value>>({});
-  const opacityMap = useRef<Record<string, Animated.Value>>({});
-  const pressMap = useRef<Record<string, Animated.Value>>({}); // ======= 여기(2) : 눌렀을 때 spring =======
-  const burstFlag = useRef<Record<string, boolean>>({}); // for burst color
+  const hexPoints = useMemo(() => pointsForHex(HEX_W, HEX_H), []);
 
-  const ensureAnim = (key: string) => {
-    if (!scaleMap.current[key]) scaleMap.current[key] = new Animated.Value(1);
-    if (!shakeMap.current[key]) shakeMap.current[key] = new Animated.Value(0);
-    if (!opacityMap.current[key]) opacityMap.current[key] = new Animated.Value(1);
-    if (!pressMap.current[key]) pressMap.current[key] = new Animated.Value(1);
-  };
+  const animsRef = useRef<Record<string, TileAnim>>({});
 
-  const resetTileAnims = () => {
-    Object.keys(scaleMap.current).forEach((k) => scaleMap.current[k].setValue(1));
-    Object.keys(shakeMap.current).forEach((k) => shakeMap.current[k].setValue(0));
-    Object.keys(opacityMap.current).forEach((k) => opacityMap.current[k].setValue(1));
-    Object.keys(pressMap.current).forEach((k) => pressMap.current[k].setValue(1));
-    burstFlag.current = {};
-  };
-
-  const spawnSpeed = useMemo(() => {
-    // HTML: Math.max(1300, (5000 - (level - 1) * 400) * 0.85);
-    return Math.max(1300, (5000 - (level - 1) * 400) * 0.85);
-  }, [level]);
-
-  const spawnSpeedText = useMemo(() => {
-    if (level < 3) return "Normal";
-    if (level < 6) return "Fast";
-    if (level < 9) return "Very Fast";
-    return "Extreme";
-  }, [level]);
-
-  const showMessage = (msg: string, style: MsgStyle) => {
-    setMessage(msg);
-    setMessageStyle(style);
-  };
-
-  const updateLevelByScore = (s: number) => {
-    const newLevel = Math.floor(s / 200) + 1;
-    if (newLevel !== level) {
-      setLevel(newLevel);
-      showMessage("LEVEL UP! 속도가 빨라집니다!", {
-        color: "#7c3aed",
-        weight: "900",
-        scale: 1.1,
-      });
+  function ensureAnim(id: string) {
+    if (!animsRef.current[id]) {
+      animsRef.current[id] = {
+        scale: new Animated.Value(1),
+        opacity: new Animated.Value(1),
+        tx: new Animated.Value(0),
+      };
     }
-  };
+    return animsRef.current[id];
+  }
 
-  const getNeighbors = (r: number, c: number): Coord[] => {
+  function getSpawnSpeed(lv: number) {
+    // return Math.max(1300, (5000 - (level - 1) * 400) * 0.85);
+    return Math.max(1300, (5000 - (lv - 1) * 400) * 0.85);
+  }
+
+  function updateSpawnSpeedText(lv: number) {
+    let t = "Normal";
+    if (lv < 3) t = "Normal";
+    else if (lv < 6) t = "Fast";
+    else if (lv < 9) t = "Very Fast";
+    else t = "Extreme";
+    setSpawnSpeedText(t);
+  }
+
+  function showMessage(msg: string, cls: typeof messageClass) {
+    setMessage(msg);
+    setMessageClass(cls);
+  }
+
+  function getNeighbors(r: number, c: number) {
     const neighbors: Coord[] = [];
-    neighbors.push({ r, c: c - 1 }, { r, c: c + 1 });
+    neighbors.push({ r, c: c - 1 });
+    neighbors.push({ r, c: c + 1 });
 
     const isShortRow = ROW_COUNTS[r] === 5;
-    [r - 1, r + 1].forEach((vr) => {
+    const verticalRows = [r - 1, r + 1];
+
+    verticalRows.forEach((vr) => {
       if (vr < 0 || vr >= ROW_COUNTS.length) return;
       if (isShortRow) {
-        neighbors.push({ r: vr, c }, { r: vr, c: c + 1 });
+        neighbors.push({ r: vr, c: c });
+        neighbors.push({ r: vr, c: c + 1 });
       } else {
-        neighbors.push({ r: vr, c: c - 1 }, { r: vr, c });
+        neighbors.push({ r: vr, c: c - 1 });
+        neighbors.push({ r: vr, c: c });
       }
     });
 
     return neighbors.filter((n) => n.c >= 0 && n.c < ROW_COUNTS[n.r]);
-  };
+  }
 
-  const checkAdjacent = (coords: [Coord, Coord]) => {
+  function checkAdjacent(coords: [Coord, Coord]) {
     if (!isValidPair(coords)) return false;
-    const neighbors = getNeighbors(coords[0].r, coords[0].c);
-    return neighbors.some((n) => n.r === coords[1].r && n.c === coords[1].c);
-  };
+    const n = getNeighbors(coords[0].r, coords[0].c);
+    return n.some((x) => x.r === coords[1].r && x.c === coords[1].c);
+  }
 
-  const checkGameOver_NoAdjacentMoves = (data: TileData) => {
-    const activeKeys = Object.keys(data).filter((k) => data[k] !== null);
+  function checkGameOver(map: TileMap) {
+    const activeKeys = Object.keys(map).filter((k) => map[k] !== null);
     if (activeKeys.length === 0) return false;
 
     for (const k of activeKeys) {
       const [r, c] = k.split(",").map(Number);
       const neighbors = getNeighbors(r, c);
       for (const nb of neighbors) {
-        if (data[keyOf(nb.r, nb.c)] !== null) return false;
+        if (map[keyOf(nb.r, nb.c)] !== null) return false;
       }
     }
     return true;
-  };
+  }
 
-  const triggerGameOver = (reason: string) => {
-    if (rafId.current != null) cancelAnimationFrame(rafId.current);
-    rafId.current = null;
-    setGameOverReason(reason);
+  function triggerGameOver() {
+    if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
+    rafIdRef.current = null;
     setGameOverVisible(true);
-  };
+  }
 
-  const checkBoardStatus = (data: TileData) => {
-    if (checkGameOver_NoAdjacentMoves(data)) {
-      triggerGameOver("더 이상 연결할 수 있는 이웃 타일이 없습니다!");
+  function checkBoardStatus(nextMap: TileMap) {
+    if (checkGameOver(nextMap)) {
+      setGameOverReason("더 이상 연결할 수 있는 이웃 타일이 없습니다!");
+      triggerGameOver();
     }
-  };
+  }
 
-  // ======= Animations (HTML 이펙트 대응) =======
-  const animatePop = (key: string) => {
-    ensureAnim(key);
-    scaleMap.current[key].setValue(0.3);
-    opacityMap.current[key].setValue(1);
-    Animated.timing(scaleMap.current[key], {
+  function resetSelection(curSelected: Coord[]) {
+    curSelected.forEach((coord) => {
+      const id = idOf(coord.r, coord.c);
+      const a = ensureAnim(id);
+      a.tx.setValue(0);
+      // selected/penalty 스타일은 렌더링에서 selectedCoords로 처리
+    });
+    setSelectedCoords([]);
+    setSum(0);
+  }
+
+  function animatePop(id: string) {
+    const a = ensureAnim(id);
+    a.scale.stopAnimation();
+    a.scale.setValue(0.3);
+    Animated.timing(a.scale, {
       toValue: 1,
       duration: 400,
       easing: Easing.bezier(0.34, 1.56, 0.64, 1),
       useNativeDriver: true,
     }).start();
-  };
+  }
 
-  const animateTilePulse = (key: string) => {
-    ensureAnim(key);
-    scaleMap.current[key].setValue(1.3);
-    Animated.timing(scaleMap.current[key], {
+  function animatePulse(id: string) {
+    const a = ensureAnim(id);
+    a.scale.stopAnimation();
+    a.scale.setValue(1.3);
+    Animated.timing(a.scale, {
       toValue: 1,
       duration: 300,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start();
-  };
+  }
 
-  const animateShakePenalty = (key: string) => {
-    ensureAnim(key);
-    shakeMap.current[key].setValue(0);
-    Animated.sequence([
-      Animated.timing(shakeMap.current[key], { toValue: -4, duration: 75, useNativeDriver: true }),
-      Animated.timing(shakeMap.current[key], { toValue: 4, duration: 75, useNativeDriver: true }),
-      Animated.timing(shakeMap.current[key], { toValue: -4, duration: 75, useNativeDriver: true }),
-      Animated.timing(shakeMap.current[key], { toValue: 0, duration: 75, useNativeDriver: true }),
-    ]).start();
-  };
+  function animateShake(ids: string[]) {
+    ids.forEach((id) => {
+      const a = ensureAnim(id);
+      a.tx.stopAnimation();
+      a.tx.setValue(0);
+      Animated.sequence([
+        Animated.timing(a.tx, { toValue: -4, duration: 75, useNativeDriver: true }),
+        Animated.timing(a.tx, { toValue: 4, duration: 150, useNativeDriver: true }),
+        Animated.timing(a.tx, { toValue: 0, duration: 75, useNativeDriver: true }),
+      ]).start();
+    });
+  }
 
-  const animateBurst = (key: string) => {
-    ensureAnim(key);
-    burstFlag.current[key] = true;
-    scaleMap.current[key].setValue(1.1);
-    opacityMap.current[key].setValue(1);
-
-    Animated.sequence([
-      Animated.timing(scaleMap.current[key], {
-        toValue: 1.5,
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
+  function animateBurst(ids: string[]) {
+    ids.forEach((id) => {
+      const a = ensureAnim(id);
+      a.scale.stopAnimation();
+      a.opacity.stopAnimation();
+      a.scale.setValue(1.1);
+      a.opacity.setValue(1);
       Animated.parallel([
-        Animated.timing(scaleMap.current[key], {
+        Animated.timing(a.scale, {
           toValue: 0,
-          duration: 300,
-          easing: Easing.in(Easing.cubic),
+          duration: 500,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(opacityMap.current[key], {
+        Animated.timing(a.opacity, {
           toValue: 0,
-          duration: 300,
-          easing: Easing.linear,
+          duration: 500,
+          easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-      ]),
-    ]).start(() => {
-      scaleMap.current[key].setValue(1);
-      opacityMap.current[key].setValue(1);
-      burstFlag.current[key] = false;
-    });
-  };
-
-  // ======= Spawn Timer =======
-  const spawnNumbers = (n: number, data: TileData) => {
-    const emptyKeys = Object.keys(data).filter((k) => data[k] === null);
-    const count = Math.min(n, emptyKeys.length);
-    const shuffled = [...emptyKeys].sort(() => 0.5 - Math.random());
-
-    const next = { ...data };
-    for (let i = 0; i < count; i++) {
-      const k = shuffled[i];
-      next[k] = randInt(1, 9);
-    }
-    return next;
-  };
-
-  const updateSpawnTimer = (ts: number) => {
-    if (gameOverVisible) return;
-
-    if (!lastTs.current) lastTs.current = ts;
-    const delta = ts - lastTs.current;
-    lastTs.current = ts;
-
-    spawnProgress.current += (delta / spawnSpeed) * 100;
-
-    if (spawnProgress.current >= 100) {
-      spawnProgress.current = 0;
-
-      setTileData((prev) => {
-        const emptyCount = Object.values(prev).filter((v) => v === null).length;
-        if (emptyCount <= 0) {
-          triggerGameOver("보드가 가득 찼습니다!");
-          return prev;
-        }
-
-        const next = spawnNumbers(1, prev);
-
-        // pop newly spawned tile(s)
-        for (const k of Object.keys(next)) {
-          if (prev[k] === null && next[k] !== null) animatePop(k);
-        }
-
-        setTimeout(() => checkBoardStatus(next), 0);
-        return next;
+      ]).start(() => {
+        a.scale.setValue(1);
+        a.opacity.setValue(1);
       });
-    }
-
-    Animated.timing(progressAnim, {
-      toValue: spawnProgress.current,
-      duration: 100,
-      easing: Easing.linear,
-      useNativeDriver: false,
-    }).start();
-
-    rafId.current = requestAnimationFrame(updateSpawnTimer);
-  };
-
-  // ======= Init =======
-  const initGame = () => {
-    if (rafId.current != null) cancelAnimationFrame(rafId.current);
-
-    setGameOverVisible(false);
-    setScore(0);
-    setLevel(1);
-    setSelectedCoords([]);
-    setSum(0);
-
-    showMessage("게임을 시작합니다!", { color: COLOR_TEXT_MUTED, weight: "800" });
-
-    const base: TileData = {};
-    ROW_COUNTS.forEach((count, r) => {
-      for (let c = 0; c < count; c++) {
-        const k = keyOf(r, c);
-        base[k] = null;
-        ensureAnim(k);
-      }
     });
+  }
 
-    resetTileAnims();
+  function spawnNumbers(n: number) {
+    setTileData((prev) => {
+      const emptyKeys = Object.keys(prev).filter((k) => prev[k] === null);
+      const count = Math.min(n, emptyKeys.length);
+      const shuffled = [...emptyKeys].sort(() => 0.5 - Math.random());
 
-    const seeded = spawnNumbers(8, base);
-    for (const k of Object.keys(seeded)) {
-      if (base[k] === null && seeded[k] !== null) animatePop(k);
-    }
+      const next: TileMap = { ...prev };
+      for (let i = 0; i < count; i++) {
+        const k = shuffled[i];
+        const [r, c] = k.split(",").map(Number);
+        const val = Math.floor(Math.random() * 9) + 1;
+        next[k] = val;
 
-    setTileData(seeded);
+        animatePop(idOf(r, c));
+      }
+      return next;
+    });
+  }
 
-    spawnProgress.current = 0;
-    progressAnim.setValue(0);
-    lastTs.current = 0;
+  function updateLevel(nextScore: number) {
+    const newLevel = Math.floor(nextScore / 200) + 1;
+    setLevel((prevLv) => {
+      if (newLevel !== prevLv) {
+        updateSpawnSpeedText(newLevel);
+        showMessage(`LEVEL UP! 속도가 빨라집니다!`, "purple");
+      }
+      return newLevel;
+    });
+  }
 
-    rafId.current = requestAnimationFrame(updateSpawnTimer);
-  };
+  function burstTiles(pairSnapshot: [Coord, Coord]) {
+    if (!isValidPair(pairSnapshot)) return;
 
-  const startGame = () => {
-    setStarted(true);
-    initGame();
-  };
+    const ids = pairSnapshot.map((c) => idOf(c.r, c.c));
+    animateBurst(ids);
 
-  // ======= Game logic (HTML 동일) =======
-  const resetSelection = () => {
+    const nextScore = score + 20;
+    setScore(nextScore);
+    updateLevel(nextScore);
+
+    showMessage("GREAT! 10 성공!", "green");
     setSelectedCoords([]);
     setSum(0);
-  };
-
-  const applyStatusVisuals = (kind: "penalty" | "selected") => {
-    if (kind === "penalty") {
-      selectedCoords.forEach((coord) => animateShakePenalty(keyOf(coord.r, coord.c)));
-    }
-  };
-
-  const burstTiles = (coordsPair: [Coord, Coord]) => {
-    if (!isValidPair(coordsPair)) return;
-
-    const burstList = [...coordsPair] as [Coord, Coord];
-
-    const newScore = score + 20;
-    setScore(newScore);
-    updateLevelByScore(newScore);
-
-    showMessage("GREAT! 10 성공!", { color: "#16a34a", weight: "900" });
-
-    burstList.forEach((coord) => animateBurst(keyOf(coord.r, coord.c)));
-
-    resetSelection();
 
     setTimeout(() => {
       setTileData((prev) => {
         const next = { ...prev };
-        burstList.forEach((coord) => (next[keyOf(coord.r, coord.c)] = null));
+        pairSnapshot.forEach((c) => {
+          next[keyOf(c.r, c.c)] = null;
+        });
+        // 10 정확히: 추가 숫자 생성 없음
+        // checkBoardStatus
         setTimeout(() => checkBoardStatus(next), 0);
         return next;
       });
     }, 500);
-  };
+  }
 
-  const processOverTen = (coords: [Coord, Coord]) => {
-    if (!isValidPair(coords)) return;
-
-    const src = coords[0];
-    const dst = coords[1];
+  function processOverTen(pairSnapshot: [Coord, Coord]) {
+    if (!isValidPair(pairSnapshot)) return;
 
     setTileData((prev) => {
-      const next = { ...prev };
-      const v1 = next[keyOf(src.r, src.c)];
-      const v2 = next[keyOf(dst.r, dst.c)];
-      if (v1 == null || v2 == null) return prev;
+      const src = pairSnapshot[0];
+      const dst = pairSnapshot[1];
 
+      const v1 = prev[keyOf(src.r, src.c)] ?? 0;
+      const v2 = prev[keyOf(dst.r, dst.c)] ?? 0;
       const remainder = v1 + v2 - 10;
 
+      const next: TileMap = { ...prev };
+
+      // src 제거
       next[keyOf(src.r, src.c)] = null;
+
+      // dst에 초과분 남김
       next[keyOf(dst.r, dst.c)] = remainder;
 
-      animateTilePulse(keyOf(dst.r, dst.c));
+      animatePulse(idOf(dst.r, dst.c));
+
       return next;
     });
 
-    resetSelection();
+    setSelectedCoords([]);
+    setSum(0);
 
-    // spawn 1
-    setTileData((prev) => {
-      const emptyCount = Object.values(prev).filter((v) => v === null).length;
-      if (emptyCount <= 0) {
-        triggerGameOver("보드가 가득 찼습니다!");
-        return prev;
-      }
-      const next = spawnNumbers(1, prev);
-      for (const k of Object.keys(next)) {
-        if (prev[k] === null && next[k] !== null) animatePop(k);
-      }
-      setTimeout(() => checkBoardStatus(next), 0);
-      return next;
-    });
-  };
+    spawnNumbers(1);
+    setTimeout(() => {
+      setTileData((cur) => {
+        checkBoardStatus(cur);
+        return cur;
+      });
+    }, 0);
+  }
 
-  const updateTilesAfterOperation = (coords: [Coord, Coord], newValue: number) => {
-    const a = coords[0];
-    const b = coords[1];
+  function processUnderTen(pairSnapshot: [Coord, Coord]) {
+    if (!isValidPair(pairSnapshot)) return;
 
     setTileData((prev) => {
-      const next = { ...prev };
-      next[keyOf(a.r, a.c)] = null;
-      next[keyOf(b.r, b.c)] = newValue;
+      const v1 = prev[keyOf(pairSnapshot[0].r, pairSnapshot[0].c)] ?? 0;
+      const v2 = prev[keyOf(pairSnapshot[1].r, pairSnapshot[1].c)] ?? 0;
+      const newValue = v1 + v2;
 
-      animateTilePulse(keyOf(b.r, b.c));
+      const next: TileMap = { ...prev };
+
+      // key1 null
+      next[keyOf(pairSnapshot[0].r, pairSnapshot[0].c)] = null;
+
+      // key2 newValue
+      next[keyOf(pairSnapshot[1].r, pairSnapshot[1].c)] = newValue;
+
+      animatePulse(idOf(pairSnapshot[1].r, pairSnapshot[1].c));
+
       return next;
     });
 
-    resetSelection();
-  };
+    setSelectedCoords([]);
+    setSum(0);
 
-  const processUnderTen = (coords: [Coord, Coord]) => {
-    if (!isValidPair(coords)) return;
+    spawnNumbers(1);
+    setTimeout(() => {
+      setTileData((cur) => {
+        checkBoardStatus(cur);
+        return cur;
+      });
+    }, 0);
+  }
 
-    const v1 = tileData[keyOf(coords[0].r, coords[0].c)];
-    const v2 = tileData[keyOf(coords[1].r, coords[1].c)];
-    if (v1 == null || v2 == null) return;
+  function initGame() {
+    if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
+    rafIdRef.current = null;
 
-    const newValue = v1 + v2;
+    setGameOverVisible(false);
+    setScore(0);
+    setLevel(1);
+    setSpawnProgress(0);
+    updateSpawnSpeedText(1);
 
-    updateTilesAfterOperation(coords, newValue);
+    setSelectedCoords([]);
+    setSum(0);
+    showMessage("게임을 시작합니다!", "slate");
 
-    // spawn 1
-    setTileData((prev) => {
-      const emptyCount = Object.values(prev).filter((v) => v === null).length;
-      if (emptyCount <= 0) {
-        triggerGameOver("보드가 가득 찼습니다!");
-        return prev;
+    const base: TileMap = {};
+    ROW_COUNTS.forEach((count, r) => {
+      for (let c = 0; c < count; c++) {
+        base[keyOf(r, c)] = null;
+        ensureAnim(idOf(r, c));
+        // reset anim values
+        const a = ensureAnim(idOf(r, c));
+        a.scale.setValue(1);
+        a.opacity.setValue(1);
+        a.tx.setValue(0);
       }
-      const next = spawnNumbers(1, prev);
-      for (const k of Object.keys(next)) {
-        if (prev[k] === null && next[k] !== null) animatePop(k);
-      }
-      setTimeout(() => checkBoardStatus(next), 0);
-      return next;
     });
-  };
 
-  const handleTileClick = (r: number, c: number) => {
+    setTileData(base);
+
+    // spawnNumbers(8) after state set
+    setTimeout(() => spawnNumbers(8), 0);
+
+    lastTsRef.current = (global as any)?.performance?.now?.() ?? Date.now();
+    const loop = (ts: number) => {
+      if (gameOverVisible) return;
+
+      const last = lastTsRef.current;
+      const delta = ts - last;
+      lastTsRef.current = ts;
+
+      const speed = getSpawnSpeed(level);
+      setSpawnProgress((p) => {
+        let next = p + (delta / speed) * 100;
+
+        if (next >= 100) {
+          next = 0;
+
+          setTileData((prev) => {
+            const emptyCount = Object.values(prev).filter((v) => v === null).length;
+            if (emptyCount > 0) {
+              // spawn 1 and check
+              const emptyKeys = Object.keys(prev).filter((k) => prev[k] === null);
+              const shuffled = [...emptyKeys].sort(() => 0.5 - Math.random());
+              const pick = shuffled[0];
+              const [r, c] = pick.split(",").map(Number);
+              const val = Math.floor(Math.random() * 9) + 1;
+
+              const nextMap: TileMap = { ...prev, [pick]: val };
+              animatePop(idOf(r, c));
+
+              // checkBoardStatus
+              setTimeout(() => checkBoardStatus(nextMap), 0);
+              return nextMap;
+            } else {
+              setGameOverReason("보드가 가득 찼습니다!");
+              triggerGameOver();
+              return prev;
+            }
+          });
+        }
+        return next;
+      });
+
+      rafIdRef.current = requestAnimationFrame(loop);
+    };
+
+    rafIdRef.current = requestAnimationFrame(loop);
+  }
+
+  function startGame() {
+    setStartOverlayVisible(false);
+    initGame();
+  }
+
+  function handleTilePress(r: number, c: number) {
     const k = keyOf(r, c);
-    if (tileData[k] === null) return;
-    if (gameOverVisible) return;
+    const v = tileData[k];
+    if (v === null) return;
 
-    const existingIdx = selectedCoords.findIndex((p) => p.r === r && p.c === c);
-
-    // toggle off
+    const existingIdx = selectedCoords.findIndex((x) => x.r === r && x.c === c);
     if (existingIdx > -1) {
       const nextSel = [...selectedCoords];
       nextSel.splice(existingIdx, 1);
       setSelectedCoords(nextSel);
-
-      const currentSum = nextSel.reduce(
-        (acc, coord) => acc + (tileData[keyOf(coord.r, coord.c)] ?? 0),
-        0
-      );
-      setSum(currentSum);
+      const s = nextSel.reduce((acc, cc) => acc + (tileData[keyOf(cc.r, cc.c)] ?? 0), 0);
+      setSum(s);
       return;
     }
 
@@ -499,449 +475,426 @@ export default function Index() {
     const nextSel = [...selectedCoords, { r, c }];
     setSelectedCoords(nextSel);
 
-    const currentSum = nextSel.reduce(
-      (acc, coord) => acc + (tileData[keyOf(coord.r, coord.c)] ?? 0),
-      0
-    );
+    const currentSum = nextSel.reduce((acc, cc) => acc + (tileData[keyOf(cc.r, cc.c)] ?? 0), 0);
     setSum(currentSum);
 
     if (nextSel.length === 2) {
       const pairSnapshot: [Coord, Coord] = [{ ...nextSel[0] }, { ...nextSel[1] }];
 
       if (!checkAdjacent(pairSnapshot)) {
-        showMessage("타일이 서로 붙어있어야 합니다!", { color: "#dc2626", weight: "900" });
-        applyStatusVisuals("penalty");
-        setTimeout(resetSelection, 600);
+        showMessage("타일이 서로 붙어있어야 합니다!", "red");
+        animateShake(pairSnapshot.map((p) => idOf(p.r, p.c)));
+        setTimeout(() => resetSelection(nextSel), 600);
         return;
       }
 
       if (currentSum === 10) {
         burstTiles(pairSnapshot);
       } else if (currentSum > 10) {
-        showMessage(`${currentSum} 초과! (합-10) 생성!`, { color: COLOR_PENALTY, weight: "900" });
-        applyStatusVisuals("penalty");
+        showMessage(`${currentSum} 초과! (합-10) 생성!`, "orange");
+        animateShake(pairSnapshot.map((p) => idOf(p.r, p.c)));
         setTimeout(() => processOverTen(pairSnapshot), 600);
       } else {
-        showMessage(`${currentSum} 미만! 숫자를 합칩니다.`, { color: COLOR_SELECTED, weight: "900" });
+        showMessage(`${currentSum} 미만! 숫자를 합칩니다.`, "blue");
         setTimeout(() => processUnderTen(pairSnapshot), 600);
       }
     } else {
-      showMessage("이웃한 숫자를 선택하세요.", { color: COLOR_SELECTED, weight: "900" });
+      showMessage("이웃한 숫자를 선택하세요.", "blue");
     }
-  };
+  }
 
-  // minimal self-tests
+  // --- Minimal self-tests (console only) ---
   useEffect(() => {
     try {
       console.assert(isValidCoord({ r: 0, c: 0 }) === true, "T1 isValidCoord failed");
       console.assert(isValidCoord({ r: 0 }) === false, "T2 isValidCoord should fail");
-      console.assert(
-        isValidPair([{ r: 0, c: 0 }, { r: 0, c: 1 }]) === true,
-        "T3 isValidPair failed"
-      );
+      console.assert(isValidPair([{ r: 0, c: 0 }, { r: 0, c: 1 }]) === true, "T3 isValidPair failed");
       console.assert(isValidPair([{ r: 0, c: 0 }]) === false, "T4 isValidPair should fail");
       console.assert(isValidPair([]) === false, "T5 isValidPair should fail");
-      console.assert(
-        checkAdjacent([{ r: 0, c: 0 }, { r: 0, c: 1 }]) === true,
-        "T6 adjacency expected true"
-      );
+      console.assert(checkAdjacent([{ r: 0, c: 0 }, { r: 0, c: 1 }]) === true, "T6 adjacency expected true");
     } catch (e) {
-      // noop
+      console.error("Self-tests error:", e);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ======= Render helpers =======
-  const isSelected = (r: number, c: number) =>
-    selectedCoords.some((p) => p.r === r && p.c === c);
+  const msgColorStyle = useMemo(() => {
+    switch (messageClass) {
+      case "red":
+        return styles.msgRed;
+      case "orange":
+        return styles.msgOrange;
+      case "blue":
+        return styles.msgBlue;
+      case "green":
+        return styles.msgGreen;
+      case "purple":
+        return styles.msgPurple;
+      default:
+        return styles.msgSlate;
+    }
+  }, [messageClass]);
 
-  const isPenalty = (r: number, c: number) => {
-    if (!isSelected(r, c)) return false;
-    if (selectedCoords.length !== 2) return false;
-    return messageStyle.color === COLOR_PENALTY || messageStyle.color === "#dc2626";
-  };
+  function isSelected(r: number, c: number) {
+    return selectedCoords.some((x) => x.r === r && x.c === c);
+  }
 
-  const tileFill = (r: number, c: number, v: TileValue) => {
-    const k = keyOf(r, c);
-    if (v === null) return COLOR_EMPTY;
-    if (burstFlag.current[k]) return COLOR_BURST;
-    if (isPenalty(r, c)) return COLOR_PENALTY;
-    if (isSelected(r, c)) return COLOR_SELECTED;
+  function tileState(r: number, c: number) {
+    const v = tileData[keyOf(r, c)];
+    if (v === null) return "empty";
+    return "active";
+  }
+
+  function tileFill(r: number, c: number) {
+    const st = tileState(r, c);
+    if (st === "empty") return COLOR_EMPTY;
+    if (isSelected(r, c)) return "#3b82f6";
     return COLOR_TILE;
-  };
+  }
 
-  const tileTextColor = (r: number, c: number, v: TileValue) => {
-    if (v === null) return "transparent";
-    if (isSelected(r, c) || isPenalty(r, c)) return "#ffffff";
-    return COLOR_TEXT_DARK;
-  };
+  function tileTextColor(r: number, c: number) {
+    const st = tileState(r, c);
+    if (st === "empty") return "transparent";
+    if (isSelected(r, c)) return "#ffffff";
+    return "#1e293b";
+  }
 
-  const messageScale = messageStyle.scale ?? 1;
+  function tileOpacity(r: number, c: number) {
+    const st = tileState(r, c);
+    return st === "empty" ? 0.5 : 1;
+  }
 
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 100],
-    outputRange: ["0%", "100%"],
-  });
+  function tileShadow(r: number, c: number) {
+    const st = tileState(r, c);
+    const sel = isSelected(r, c);
+    if (st === "empty") return null;
 
-  const screenW = Dimensions.get("window").width;
-  const containerW = Math.min(screenW * 0.95, 520);
+    if (sel) {
+      return {
+        shadowColor: "rgba(59, 130, 246, 1)",
+        shadowOpacity: 0.6,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 10,
+      };
+    }
+    return {
+      shadowColor: "rgba(0,0,0,1)",
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    };
+  }
+
+  function tileScaleFactor(r: number, c: number) {
+    const st = tileState(r, c);
+    const sel = isSelected(r, c);
+    if (st === "empty") return 1;
+    if (sel) return 1.1;
+    return 1;
+  }
 
   return (
-    <View style={[styles.body, { backgroundColor: COLOR_BG }]}>
-      <View style={[styles.gameContainer, { width: containerW }]}>
-        {/* Start Overlay */}
-        {!started && (
-          <View style={styles.startOverlay}>
-            <Pressable
-              onPress={startGame}
-              style={({ pressed }) => [
-                styles.startButton,
-                pressed && { transform: [{ scale: 0.95 }] },
-              ]}
-            >
-              <Text style={styles.startButtonText}>시작하기</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* Game Over Modal */}
-        {gameOverVisible && (
-          <View style={styles.gameOverModal}>
-            <Text style={styles.gameOverTitle}>GAME OVER</Text>
-            <Text style={styles.gameOverReason}>{gameOverReason}</Text>
-            <Text style={styles.gameOverScore}>
-              최종 점수: <Text style={styles.gameOverScoreValue}>{score}</Text>
-            </Text>
-            <Pressable
-              onPress={initGame}
-              style={({ pressed }) => [
-                styles.retryButton,
-                pressed && { transform: [{ scale: 0.95 }] },
-              ]}
-            >
-              <Text style={styles.retryButtonText}>다시 시도</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* Score Board */}
-        <View style={styles.scoreBoard}>
-          <Text style={styles.h1}>숫자 터트리기</Text>
-
-          <View style={styles.scoreRow}>
-            <Text style={styles.metaText}>
-              Lv.<Text style={styles.metaValue}>{level}</Text>
-            </Text>
-            <Text style={styles.metaText}>
-              Score: <Text style={styles.scoreValue}>{score}</Text>
-            </Text>
-          </View>
-
-          {/* Auto Spawn Gauge */}
-          <View style={styles.statusContainer}>
-            <View style={styles.statusHeader}>
-              <Text style={styles.statusLabel}>Next Tile Spawn</Text>
-              <Text style={styles.statusLabel}>{spawnSpeedText}</Text>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.body}>
+        <View style={styles.gameContainer}>
+          {/* Start Overlay */}
+          {startOverlayVisible && (
+            <View style={styles.startOverlay}>
+              <Pressable onPress={startGame} style={({ pressed }) => [styles.startBtn, pressed && styles.startBtnPressed]}>
+                <Text style={styles.startBtnText}>시작하기</Text>
+              </Pressable>
             </View>
-            <View style={styles.progressBarBg}>
-              <Animated.View style={[styles.progressBarFill, { width: progressWidth }]} />
+          )}
+
+          {/* Game Over Modal */}
+          {gameOverVisible && (
+            <View style={styles.gameOverModal}>
+              <Text style={styles.gameOverTitle}>GAME OVER</Text>
+              <Text style={styles.gameOverReason}>{gameOverReason}</Text>
+              <Text style={styles.finalScore}>
+                최종 점수: <Text style={styles.finalScoreNum}>{score}</Text>
+              </Text>
+              <Pressable onPress={initGame} style={({ pressed }) => [styles.retryBtn, pressed && styles.retryBtnPressed]}>
+                <Text style={styles.retryBtnText}>다시 시도</Text>
+              </Pressable>
             </View>
+          )}
+
+          {/* Score Board */}
+          <View style={styles.scoreBoard}>
+            <Text style={styles.title}>숫자 터트리기</Text>
+
+            <View style={styles.topRow}>
+              <Text style={styles.topRowText}>
+                Lv.<Text style={styles.topRowText}>{level}</Text>
+              </Text>
+              <Text style={styles.topRowText}>
+                Score: <Text style={styles.scoreBlue}>{score}</Text>
+              </Text>
+            </View>
+
+            {/* Auto Spawn Gauge */}
+            <View style={styles.statusContainer}>
+              <View style={styles.statusRow}>
+                <Text style={styles.statusLeft}>Next Tile Spawn</Text>
+                <Text style={styles.statusRight}>{spawnSpeedText}</Text>
+              </View>
+              <View style={styles.progressBarBg}>
+                <View style={[styles.progressBarFill, { width: `${spawnProgress}%` }]} />
+              </View>
+            </View>
+
+            <View style={styles.sumRow}>
+              <Text style={styles.sumDisplay}>{sum}</Text>
+              <Text style={styles.sumDenom}>/ 10</Text>
+            </View>
+
+            <Text style={[styles.message, msgColorStyle]}>{message}</Text>
           </View>
 
-          <View style={styles.sumRow}>
-            <Text style={styles.sumValue}>{sum}</Text>
-            <Text style={styles.sumDen}>/ 10</Text>
-          </View>
+          {/* Grid */}
+          <View style={styles.gridContainer}>
+            {ROW_COUNTS.map((count, r) => {
+              return (
+                <View key={`row-${r}`} style={[styles.hexRow, r !== ROW_COUNTS.length - 1 && styles.hexRowOverlap]}>
+                  {Array.from({ length: count }).map((_, c) => {
+                    const id = idOf(r, c);
+                    const a = ensureAnim(id);
+                    const value = tileData[keyOf(r, c)];
+                    const st = tileState(r, c);
+                    const sel = isSelected(r, c);
 
-          <Animated.Text
-            style={[
-              styles.message,
-              {
-                color: messageStyle.color,
-                fontWeight: messageStyle.weight ?? "800",
-                transform: [{ scale: messageScale }],
-              },
-            ]}
-            numberOfLines={1}
-          >
-            {message}
-          </Animated.Text>
-        </View>
+                    const baseScale = tileScaleFactor(r, c);
 
-        {/* Grid */}
-        <View style={styles.hexGridContainer}>
-          {ROW_COUNTS.map((count, r) => (
-            <View key={`row-${r}`} style={styles.hexRow}>
-              {Array.from({ length: count }).map((_, c) => {
-                const k = keyOf(r, c);
-                ensureAnim(k);
+                    const shadow = tileShadow(r, c);
+                    const wrapperStyle = [
+                      styles.hexWrapper,
+                      { opacity: tileOpacity(r, c) },
+                      shadow ?? null,
+                    ];
 
-                const v = tileData[k] ?? null;
-                const disabled = v === null;
-
-                const selected = isSelected(r, c);
-                const fill = tileFill(r, c, v);
-                const tColor = tileTextColor(r, c, v);
-
-                // ======= 여기(2) : 누를 때 자연스럽게 spring scale =======
-                const baseSelectedScale = selected ? 1.1 : 1;
-                const animatedScale = Animated.multiply(
-                  Animated.multiply(scaleMap.current[k], pressMap.current[k]),
-                  baseSelectedScale
-                );
-
-                const translateX = shakeMap.current[k];
-                const opacity = opacityMap.current[k];
-
-                return (
-                  <Pressable
-                    key={`hex-${r}-${c}`}
-                    onPress={() => handleTileClick(r, c)}
-                    onPressIn={() => {
-                      if (disabled) return;
-                      Animated.spring(pressMap.current[k], {
-                        toValue: 1.08,
-                        useNativeDriver: true,
-                        friction: 6,
-                        tension: 160,
-                      }).start();
-                    }}
-                    onPressOut={() => {
-                      if (disabled) return;
-                      Animated.spring(pressMap.current[k], {
-                        toValue: 1,
-                        useNativeDriver: true,
-                        friction: 6,
-                        tension: 160,
-                      }).start();
-                    }}
-                    disabled={disabled}
-                    style={[styles.hexPressable, { marginHorizontal: HEX_GAP / 2 }]}
-                  >
-                    {/* ======= 여기(3) : View shadow 제거 (네모 테두리 문제 원인) ======= */}
-                    <Animated.View
-                      style={[
-                        styles.hexWrapper,
-                        disabled && styles.hexDisabled,
-                        {
-                          opacity,
-                          transform: [{ translateX }, { scale: animatedScale }],
-                        },
-                      ]}
-                    >
-                      <Svg width={HEX_W} height={HEX_H} viewBox="0 0 100 100">
-                        {/* 선택/패널티 글로우: filter (지원 안 되면 아래 fake shadow만으로도 네모 문제는 해결됨) */}
-                        <Defs>
-                          <Filter id="glowBlue" x="-50%" y="-50%" width="200%" height="200%">
-                            <FeDropShadow
-                              dx="0"
-                              dy="0"
-                              stdDeviation="6"
-                              floodColor="rgba(59,130,246,0.6)"
-                            />
-                          </Filter>
-                          <Filter id="glowOrange" x="-50%" y="-50%" width="200%" height="200%">
-                            <FeDropShadow
-                              dx="0"
-                              dy="0"
-                              stdDeviation="5"
-                              floodColor="rgba(249,115,22,0.55)"
-                            />
-                          </Filter>
-                        </Defs>
-
-                        {/* ✅ “육각형 모양” 그림자: 네모 shadow 문제를 원천 해결 */}
-                        {v !== null && !selected && !isPenalty(r, c) && !burstFlag.current[k] && (
-                          <Polygon
-                            points={HEX_POINTS}
-                            fill="rgba(0,0,0,0.12)"
-                            transform="translate(0 2)"
-                          />
-                        )}
-
-                        <Polygon
-                          points={HEX_POINTS}
-                          fill={fill}
-                          filter={
-                            v === null
-                              ? undefined
-                              : isPenalty(r, c)
-                              ? "url(#glowOrange)"
-                              : selected
-                              ? "url(#glowBlue)"
-                              : undefined
-                          }
-                        />
-
-                        {v != null && (
-                          <SvgText
-                            x="50"
-                            y="58"
-                            fontSize="32"
-                            fontWeight="900"
-                            fill={tColor}
-                            textAnchor="middle"
+                    return (
+                      <View key={id} style={wrapperStyle}>
+                        <Pressable
+                          onPress={() => handleTilePress(r, c)}
+                          disabled={st === "empty"}
+                          style={styles.hexPress}
+                        >
+                          <Animated.View
+                            style={{
+                              transform: [
+                                { translateX: a.tx },
+                                { scale: Animated.multiply(a.scale, baseScale) },
+                              ],
+                              opacity: a.opacity,
+                            }}
                           >
-                            {v}
-                          </SvgText>
-                        )}
-                      </Svg>
-                    </Animated.View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-        </View>
+                            <Svg width={HEX_W} height={HEX_H} style={styles.hexSvg}>
+                              <Polygon points={hexPoints} fill={tileFill(r, c)} />
+                            </Svg>
 
-        <View style={styles.tipWrap}>
-          <Text style={styles.tipText}>
-            10 완성 시 빈 타일 추가 생성 없음! 보드를 비워 공간을 확보하세요.
-          </Text>
+                            <View style={styles.hexTextWrap}>
+                              <Text
+                                style={[
+                                  styles.hexText,
+                                  { color: tileTextColor(r, c) },
+                                  sel ? styles.hexTextSelected : null,
+                                ]}
+                              >
+                                {value === null ? "" : String(value)}
+                              </Text>
+                            </View>
+                          </Animated.View>
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Footer hint */}
+          <View style={styles.footerWrap}>
+            <Text style={styles.footerPill}>
+              10 완성 시 빈 타일 추가 생성 없음! 보드를 비워 공간을 확보하세요.
+            </Text>
+          </View>
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#e2e8f0" },
   body: {
     flex: 1,
+    backgroundColor: "#e2e8f0",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-
   gameContainer: {
     position: "relative",
     padding: 30,
-    backgroundColor: COLOR_CONTAINER,
-    borderRadius: 32,
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 25,
-    shadowOffset: { width: 0, height: 25 },
-    elevation: 12,
+    backgroundColor: "#ffffff",
+    borderRadius: 32, // 2rem
+    maxWidth: "95%",
+    ...Platform.select({
+      ios: {
+        shadowColor: "rgba(0,0,0,1)",
+        shadowOpacity: 0.25,
+        shadowRadius: 25,
+        shadowOffset: { width: 0, height: 12 },
+      },
+      android: {
+        elevation: 10,
+      },
+      default: {},
+    }),
   },
 
+  // Start overlay
   startOverlay: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.90)",
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(255,255,255,0.9)",
     zIndex: 50,
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
   },
-  startButton: {
+  startBtn: {
     paddingHorizontal: 40,
     paddingVertical: 16,
-    backgroundColor: "#2563eb",
-    borderRadius: 18,
+    backgroundColor: "#2563eb", // blue-600
+    borderRadius: 24,
+    transform: [{ scale: 1 }],
   },
-  startButtonText: {
+  startBtnPressed: {
+    backgroundColor: "#1d4ed8", // blue-700
+    transform: [{ scale: 0.95 }],
+  },
+  startBtnText: {
     color: "#fff",
     fontSize: 24,
     fontWeight: "900",
+    fontFamily: "Pretendard",
   },
 
+  // Game over modal
   gameOverModal: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 32,
+    top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: "rgba(255,255,255,0.95)",
     zIndex: 100,
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 18,
+    textAlign: "center",
+    paddingHorizontal: 20,
   },
   gameOverTitle: {
     fontSize: 36,
     fontWeight: "900",
-    color: "#ef4444",
+    color: "#ef4444", // red-500
     marginBottom: 8,
+    fontFamily: "Pretendard",
   },
   gameOverReason: {
-    color: "#64748b",
-    fontWeight: "800",
-    textAlign: "center",
-    marginBottom: 18,
+    color: "#64748b", // slate-500
+    fontWeight: "700",
+    marginBottom: 24,
+    fontFamily: "Pretendard",
   },
-  gameOverScore: {
-    fontSize: 22,
+  finalScore: {
+    fontSize: 24,
+    fontWeight: "700",
+    marginBottom: 32,
+    color: "#334155", // slate-700
+    fontFamily: "Pretendard",
+  },
+  finalScoreNum: {
     fontWeight: "900",
-    color: "#334155",
-    marginBottom: 22,
+    fontFamily: "Pretendard",
   },
-  gameOverScoreValue: {
-    color: "#2563eb",
-    fontWeight: "900",
-  },
-  retryButton: {
+  retryBtn: {
     paddingHorizontal: 32,
     paddingVertical: 12,
     backgroundColor: "#2563eb",
-    borderRadius: 18,
+    borderRadius: 24,
+    transform: [{ scale: 1 }],
   },
-  retryButtonText: {
+  retryBtnPressed: {
+    backgroundColor: "#1d4ed8",
+    transform: [{ scale: 0.95 }],
+  },
+  retryBtnText: {
     color: "#fff",
     fontSize: 20,
     fontWeight: "900",
+    fontFamily: "Pretendard",
   },
 
+  // Scoreboard
   scoreBoard: {
     alignItems: "center",
     marginBottom: 10,
   },
-  h1: {
+  title: {
     fontSize: 30,
     fontWeight: "900",
-    color: "#1f2937",
-    marginBottom: 6,
+    color: "#1e293b", // slate-800
+    marginBottom: 4,
+    fontFamily: "Pretendard",
   },
-  scoreRow: {
-    width: "100%",
-    paddingHorizontal: 8,
+  topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    width: "100%",
+    paddingHorizontal: 8,
   },
-  metaText: {
+  topRowText: {
     fontSize: 18,
-    fontWeight: "800",
-    color: "#64748b",
+    fontWeight: "700",
+    color: "#64748b", // slate-500
+    fontFamily: "Pretendard",
   },
-  metaValue: {
-    color: "#64748b",
-    fontWeight: "800",
-  },
-  scoreValue: {
+  scoreBlue: {
     color: "#2563eb",
     fontWeight: "900",
+    fontFamily: "Pretendard",
   },
 
+  // Status
   statusContainer: {
     width: "100%",
     marginTop: 8,
-    marginBottom: 2,
+    marginBottom: 0,
   },
-  statusHeader: {
-    width: "100%",
+  statusRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginBottom: 5,
   },
-  statusLabel: {
+  statusLeft: {
     fontSize: 10,
-    fontWeight: "900",
+    fontWeight: "700",
+    color: "#94a3b8", // slate-400
+    textTransform: "uppercase",
+    letterSpacing: -0.5,
+    fontFamily: "Pretendard",
+  },
+  statusRight: {
+    fontSize: 10,
+    fontWeight: "700",
     color: "#94a3b8",
     textTransform: "uppercase",
-    letterSpacing: -0.2,
+    letterSpacing: -0.5,
+    fontFamily: "Pretendard",
   },
   progressBarBg: {
     width: "100%",
@@ -949,78 +902,110 @@ const styles = StyleSheet.create({
     backgroundColor: "#e2e8f0",
     borderRadius: 4,
     overflow: "hidden",
-    marginTop: 5,
   },
   progressBarFill: {
     height: "100%",
     backgroundColor: "#3b82f6",
   },
 
+  // Sum
   sumRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 10,
-    marginTop: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    columnGap: 12,
+    marginTop: 12,
   },
-  sumValue: {
-    color: "#f97316",
-    fontSize: 40,
+  sumDisplay: {
+    color: "#f97316", // orange-500
+    fontSize: 36,
     fontWeight: "900",
+    fontFamily: "Pretendard",
   },
-  sumDen: {
+  sumDenom: {
     color: "#94a3b8",
     fontSize: 20,
-    fontWeight: "900",
-    paddingBottom: 6,
+    fontWeight: "700",
+    fontFamily: "Pretendard",
   },
 
+  // Message (height fixed 24px like HTML)
   message: {
-    height: 24,
     marginTop: 12,
-    fontSize: 13,
+    height: 24,
+    fontSize: 14,
     fontWeight: "900",
+    fontFamily: "Pretendard",
   },
+  msgSlate: { color: "#64748b" },
+  msgRed: { color: "#dc2626" },
+  msgOrange: { color: "#f97316" },
+  msgBlue: { color: "#3b82f6" },
+  msgGreen: { color: "#16a34a" },
+  msgPurple: { color: "#9333ea", transform: [{ scale: 1.1 }] },
 
-  hexGridContainer: {
+  // Grid container
+  gridContainer: {
+    alignItems: "center",
+    gap: 2 as any,
     marginTop: 10,
     padding: 25,
     backgroundColor: COLOR_BG_GRID,
     borderRadius: 24,
-    alignItems: "center",
     overflow: "visible",
   },
   hexRow: {
     flexDirection: "row",
     justifyContent: "center",
-    marginBottom: -20,
+    columnGap: HEX_GAP,
   },
-
-  hexPressable: {
-    width: HEX_W,
-    height: HEX_H,
+  hexRowOverlap: {
+    marginBottom: -20,
   },
   hexWrapper: {
     width: HEX_W,
     height: HEX_H,
+  },
+  hexPress: {
+    width: HEX_W,
+    height: HEX_H,
+  },
+  hexSvg: {
+    width: HEX_W,
+    height: HEX_H,
+  },
+  hexTextWrap: {
+    position: "absolute",
+    left: 0, top: 0, right: 0, bottom: 0,
     alignItems: "center",
     justifyContent: "center",
   },
-  hexDisabled: {
-    opacity: 0.5,
+  hexText: {
+    fontSize: 26, // 1.6rem approx
+    fontWeight: "900",
+    fontFamily: "Pretendard",
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+  hexTextSelected: {
+    color: "#fff",
   },
 
-  tipWrap: {
+  // Footer
+  footerWrap: {
     marginTop: 32,
     alignItems: "center",
+    gap: 16 as any,
   },
-  tipText: {
+  footerPill: {
     fontSize: 11,
     color: "#64748b",
-    fontWeight: "800",
+    fontWeight: "700",
     backgroundColor: "#f1f5f9",
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 999,
     textAlign: "center",
+    fontFamily: "Pretendard",
   },
 });
