@@ -760,7 +760,7 @@ export default function App() {
                             </Svg>
 
                             <View style={styles.hexTextWrap}>
-                              <Text style={[styles.hexText, { color: textColor }, sel && styles.hexTextSelected]}>
+                              <Text selectable={false} style={[styles.hexText, { color: textColor }, sel && styles.hexTextSelected]}>
                                 {value === null ? "" : String(value)}
                               </Text>
                             </View>
