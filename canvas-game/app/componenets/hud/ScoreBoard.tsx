@@ -4,6 +4,7 @@ import { View, Text } from "react-native";
 export default function ScoreBoard({
   level,
   score,
+  highScore,      
   spawnSpeedText,
   spawnProgress,
   sum,
@@ -13,6 +14,7 @@ export default function ScoreBoard({
 }: {
   level: number;
   score: number;
+  highScore: number;  
   spawnSpeedText: string;
   spawnProgress: number;
   sum: number;
@@ -24,12 +26,18 @@ export default function ScoreBoard({
     <View style={styles.scoreBoard}>
       <View style={styles.topRow}>
         <Text style={styles.topRowText}>
-          Lv.<Text style={styles.topRowText}>{level}</Text>
+            Lv.<Text style={styles.topRowText}>{level}</Text>
         </Text>
-        <Text style={styles.topRowText}>
-          Score: <Text style={styles.scoreBlue}>{score}</Text>
-        </Text>
-      </View>
+
+        <View style={{ alignItems: "flex-end" }}>
+            <Text style={styles.topRowText}>
+            High: <Text style={styles.scoreBlue}>{highScore}</Text>
+            </Text>
+            <Text style={styles.topRowText}>
+            Score: <Text style={styles.scoreBlue}>{score}</Text>
+            </Text>
+        </View>
+        </View>
 
       <View style={styles.statusContainer}>
         <View style={styles.statusRow}>

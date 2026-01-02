@@ -25,9 +25,11 @@ import StartOverlay from "./componenets/overlays/StartOverlay";
 import GameOverModal from "./componenets/overlays/GameOverModal";
 import ScoreBoard from "./componenets/hud/ScoreBoard";
 import HexGrid from "./componenets/grid/HexGrid";
+import { saveHighScoreIfGreater, loadHighScore } from "./utils/highScore";
 
 export default function App() {
   const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
   const [level, setLevel] = useState(1);
 
   const [selectedCoords, setSelectedCoords] = useState<Coord[]>([]);
@@ -53,6 +55,11 @@ export default function App() {
   const animsRef = useRef<Record<string, TileAnim>>({});
   const [burstIds, setBurstIds] = useState<Record<string, true>>({});
   const [penaltyIds, setPenaltyIds] = useState<Record<string, true>>({});
+
+  useEffect(() => {
+    setHighScore((hs) => (score > hs ? score : hs));
+    }, [score]);
+
 
   function ensureAnim(id: string) {
     if (!animsRef.current[id]) {
@@ -106,11 +113,15 @@ export default function App() {
     setMessageClass(cls);
   }
 
-  function triggerGameOver() {
-    if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
-    rafIdRef.current = null;
-    setGameOverVisible(true);
-  }
+  async function triggerGameOver() {
+        if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+
+        await saveHighScoreIfGreater(highScore); // ✅ 실시간 highScore를 저장
+        setGameOverVisible(true);
+    }
+
+
 
   function checkBoardStatus(nextMap: TileMap) {
     if (checkGameOver(nextMap)) {
@@ -573,6 +584,7 @@ export default function App() {
           <ScoreBoard
             level={level}
             score={score}
+            highScore={highScore} 
             spawnSpeedText={spawnSpeedText}
             spawnProgress={spawnProgress}
             sum={sum}
