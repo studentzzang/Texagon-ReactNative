@@ -660,7 +660,6 @@ export default function App() {
           )}
 
           <View style={styles.scoreBoard}>
-            <Text style={styles.title}>숫자 터트리기</Text>
 
             <View style={styles.topRow}>
               <Text style={styles.topRowText}>
@@ -761,7 +760,7 @@ export default function App() {
 
                             <View style={styles.hexTextWrap}>
                               <Text selectable={false} style={[styles.hexText, { color: textColor }, sel && styles.hexTextSelected]}>
-                                {value === null ? "" : String(value)}
+                                {typeof value === "number" ? String(value) : ""} 
                               </Text>
                             </View>
                           </Animated.View>
