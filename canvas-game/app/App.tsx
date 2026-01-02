@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+
 import {
   View,
+  Platform,
   Text,
   SafeAreaView,
   Animated,
@@ -26,6 +28,7 @@ import GameOverModal from "./componenets/overlays/GameOverModal";
 import ScoreBoard from "./componenets/hud/ScoreBoard";
 import HexGrid from "./componenets/grid/HexGrid";
 import { saveHighScoreIfGreater, loadHighScore } from "./utils/highScore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function App() {
   const [score, setScore] = useState(0);
@@ -56,8 +59,25 @@ export default function App() {
   const [burstIds, setBurstIds] = useState<Record<string, true>>({});
   const [penaltyIds, setPenaltyIds] = useState<Record<string, true>>({});
 
+  const highWobble = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    setHighScore((hs) => (score > hs ? score : hs));
+    (async () => {
+        const hs = await loadHighScore();
+        setHighScore(hs);
+    })();
+    }, []);
+
+
+
+  useEffect(() => {
+    setHighScore((hs) => {
+        if (score > hs) {
+        playHighWobble();   
+        saveHighScoreIfGreater(score);
+        return score;
+        }
+        return hs; });
     }, [score]);
 
 
@@ -95,6 +115,20 @@ export default function App() {
     }).start();
   }
 
+  const useNative = Platform.OS !== "web";
+
+    function playHighWobble() {
+    highWobble.stopAnimation();
+    highWobble.setValue(0);
+
+    Animated.sequence([
+        Animated.timing(highWobble, { toValue: -0.7, duration: 80, useNativeDriver: useNative }),
+        Animated.timing(highWobble, { toValue:  0.7, duration: 140, useNativeDriver: useNative }),
+        Animated.timing(highWobble, { toValue:  0,   duration: 80, useNativeDriver: useNative }),
+        ]).start();
+    }
+
+
   function getSpawnSpeed(lv: number) {
     return Math.max(1300, (5000 - (lv - 1) * 400) * 0.85);
   }
@@ -129,6 +163,7 @@ export default function App() {
       triggerGameOver();
     }
   }
+
 
   function clearSelectionWithAnim(coords: Coord[]) {
     coords.forEach((c) => animateSelectOut(idOf(c.r, c.c)));
@@ -512,9 +547,16 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+  // ⚠️ 테스트용: AsyncStorage 전체 삭제 (절대 상시 사용 금지)
+    AsyncStorage.clear();
+    }, []);
+
   // --- Minimal self-tests (console only) ---
   useEffect(() => {
+    
     try {
+        
       console.assert(isValidCoord({ r: 0, c: 0 }) === true, "T1 isValidCoord failed");
       console.assert(isValidCoord({ r: 0 }) === false, "T2 isValidCoord should fail");
       console.assert(isValidPair([{ r: 0, c: 0 }, { r: 0, c: 1 }]) === true, "T3 isValidPair failed");
@@ -585,6 +627,7 @@ export default function App() {
             level={level}
             score={score}
             highScore={highScore} 
+            highWobble={highWobble}
             spawnSpeedText={spawnSpeedText}
             spawnProgress={spawnProgress}
             sum={sum}

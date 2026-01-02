@@ -1,5 +1,6 @@
 import { Platform, StyleSheet } from "react-native";
-import { COLOR_BG_GRID, COLOR_EMPTY, HEX_GAP, HEX_H, HEX_W } from "../constants/game";
+import { COLOR_BG_GRID, HEX_GAP, HEX_H, HEX_W } from "../constants/game";
+
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#e2e8f0" },
@@ -127,6 +128,8 @@ const styles = StyleSheet.create({
     fontFamily: "Pretendard",
   },
   scoreBlue: { color: "#2563eb", fontWeight: "900", fontFamily: "Pretendard" },
+  scoreOrange: { color: "#f97316", fontWeight: "900", fontFamily: "Pretendard" },
+
 
   statusContainer: { width: "100%", marginTop: 8, marginBottom: 0 },
   statusRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },

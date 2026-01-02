@@ -1,10 +1,11 @@
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text, Animated } from "react-native";
 
 export default function ScoreBoard({
   level,
   score,
-  highScore,      
+  highScore,
+  highWobble,         
   spawnSpeedText,
   spawnProgress,
   sum,
@@ -14,7 +15,8 @@ export default function ScoreBoard({
 }: {
   level: number;
   score: number;
-  highScore: number;  
+  highScore: number;
+  highWobble: Animated.Value; 
   spawnSpeedText: string;
   spawnProgress: number;
   sum: number;
@@ -26,18 +28,40 @@ export default function ScoreBoard({
     <View style={styles.scoreBoard}>
       <View style={styles.topRow}>
         <Text style={styles.topRowText}>
-            Lv.<Text style={styles.topRowText}>{level}</Text>
+          Lv.<Text style={styles.topRowText}>{level}</Text>
         </Text>
 
         <View style={{ alignItems: "flex-end" }}>
-            <Text style={styles.topRowText}>
-            High: <Text style={styles.scoreBlue}>{highScore}</Text>
-            </Text>
-            <Text style={styles.topRowText}>
+          <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+            <Text style={styles.topRowText}>High: </Text>
+
+            <Animated.Text
+                style={[
+                styles.topRowText,
+                styles.scoreOrange,
+                
+                {
+                    transform: [
+                    {
+                        translateX: highWobble.interpolate({
+                        inputRange: [-1, 1],
+                        outputRange: [-4,4],
+                        }),
+                    },
+                    ],
+                },
+                ]}
+            >
+                {highScore}
+            </Animated.Text>
+            </View>
+
+
+          <Text style={styles.topRowText}>
             Score: <Text style={styles.scoreBlue}>{score}</Text>
-            </Text>
+          </Text>
         </View>
-        </View>
+      </View>
 
       <View style={styles.statusContainer}>
         <View style={styles.statusRow}>
