@@ -21,6 +21,10 @@ DerivedData
 *.ipa
 *.xcuserstate
 
+# Expo
+.expo/
+expo-env.d.ts
+
 # Android/IntelliJ
 #
 build/
@@ -57,3 +61,5 @@ buck-out/
 
 # CocoaPods
 /ios/Pods/
+canvas-game/.expo/types/router.d.ts
+canvas-game/.expo/types/router.d.ts
