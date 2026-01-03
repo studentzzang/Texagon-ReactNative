@@ -15,7 +15,7 @@ import {
 
 import styles from "./styles/appStyles";
 
-import { ROW_COUNTS, HEX_W, HEX_H, HEX_GAP, COLOR_TILE, COLOR_EMPTY } from "./constants/game";
+import { ROW_COUNTS, HEX_W, HEX_H, HEX_GAP, COLOR_TILE, COLOR_EMPTY, START_TILE_NUM } from "./constants/game";
 import type { Coord, TileMap, TileAnim } from "./types/game";
 import {
   keyOf,
@@ -427,7 +427,7 @@ export default function App() {
 
     setTileData(base);
 
-    setTimeout(() => spawnNumbers(8), 0);
+    setTimeout(() => spawnNumbers(START_TILE_NUM), 0);
 
     lastTsRef.current = (global as any)?.performance?.now?.() ?? Date.now();
     const loop = (ts: number) => {
