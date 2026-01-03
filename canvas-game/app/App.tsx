@@ -38,7 +38,6 @@ export default function App() {
   const [highScore, setHighScore] = useState(0);
 
   const level = calcLevel(score);
-  const spawnInterval = calcSpawnInterval(level);
 
 
   
@@ -326,7 +325,6 @@ export default function App() {
 
     const nextScore = score + 20;
     setScore(nextScore);
-    const level = calcLevel(score);
 
     showMessage("GREAT! 10 성공!", "green");
 
