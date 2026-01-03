@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-
+import {
+  calcLevel,
+  calcSpawnInterval,
+  BASE_SPAWN_MS,
+} from "./constants/gameSpeed";
 import {
   View,
   Platform,
@@ -28,12 +32,16 @@ import GameOverModal from "./componenets/overlays/GameOverModal";
 import ScoreBoard from "./componenets/hud/ScoreBoard";
 import HexGrid from "./componenets/grid/HexGrid";
 import { saveHighScoreIfGreater, loadHighScore } from "./utils/highScore";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function App() {
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
-  const [level, setLevel] = useState(1);
+
+  const level = calcLevel(score);
+  const spawnInterval = calcSpawnInterval(level);
+
+
+  
 
   const [selectedCoords, setSelectedCoords] = useState<Coord[]>([]);
   const [tileData, setTileData] = useState<TileMap>({});
@@ -61,6 +69,9 @@ export default function App() {
 
   const highWobble = useRef(new Animated.Value(0)).current;
 
+  const scoreRef = useRef<number>(0);
+  const spawnIntervalRef = useRef<number>(BASE_SPAWN_MS);
+
   useEffect(() => {
     (async () => {
         const hs = await loadHighScore();
@@ -68,6 +79,16 @@ export default function App() {
     })();
     }, []);
 
+
+    useEffect(() => {
+      scoreRef.current = score;
+
+      const lv = calcLevel(score);
+      const ms = calcSpawnInterval(lv);
+
+      spawnIntervalRef.current = ms;
+      updateSpawnSpeedText(lv);
+    }, [score]);
 
 
   useEffect(() => {
@@ -129,9 +150,6 @@ export default function App() {
     }
 
 
-  function getSpawnSpeed(lv: number) {
-    return Math.max(1300, (5000 - (lv - 1) * 400) * 0.85);
-  }
 
   function updateSpawnSpeedText(lv: number) {
     let t = "Normal";
@@ -297,17 +315,6 @@ export default function App() {
     });
   }
 
-  function updateLevel(nextScore: number) {
-    const newLevel = Math.floor(nextScore / 200) + 1;
-    setLevel((prevLv) => {
-      if (newLevel !== prevLv) {
-        updateSpawnSpeedText(newLevel);
-        showMessage(`LEVEL UP! 속도가 빨라집니다!`, "purple");
-      }
-      return newLevel;
-    });
-  }
-
   function burstTiles(pairSnapshot: [Coord, Coord]) {
     if (!isValidPair(pairSnapshot)) return;
 
@@ -319,7 +326,7 @@ export default function App() {
 
     const nextScore = score + 20;
     setScore(nextScore);
-    updateLevel(nextScore);
+    const level = calcLevel(score);
 
     showMessage("GREAT! 10 성공!", "green");
 
@@ -398,7 +405,6 @@ export default function App() {
 
     setGameOverVisible(false);
     setScore(0);
-    setLevel(1);
     setSpawnProgress(0);
     updateSpawnSpeedText(1);
 
@@ -431,7 +437,7 @@ export default function App() {
       const delta = ts - last;
       lastTsRef.current = ts;
 
-      const speed = getSpawnSpeed(level);
+      const speed = spawnIntervalRef.current;
       setSpawnProgress((p) => {
         let next = p + (delta / speed) * 100;
 
@@ -481,7 +487,7 @@ export default function App() {
 
     const existingIdx = selectedCoords.findIndex((x) => x.r === r && x.c === c);
     if (existingIdx > -1) {
-      // ✅ 해제
+
       animateSelectOut(id);
 
       const nextSel = [...selectedCoords];
@@ -495,7 +501,6 @@ export default function App() {
 
     if (selectedCoords.length >= 2) return;
 
-    // ✅ 선택
     animateSelectIn(id);
 
     const nextSel = [...selectedCoords, { r, c }];
@@ -547,10 +552,7 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-  // ⚠️ 테스트용: AsyncStorage 전체 삭제 (절대 상시 사용 금지)
-    AsyncStorage.clear();
-    }, []);
+  
 
   // --- Minimal self-tests (console only) ---
   useEffect(() => {
