@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  calcLevel,
+  calcSpawnInterval,
+  BASE_SPAWN_MS,
+} from "./constants/gameSpeed";
+import {
   View,
+  Platform,
   Text,
   SafeAreaView,
   Animated,
@@ -9,7 +15,7 @@ import {
 
 import styles from "./styles/appStyles";
 
-import { ROW_COUNTS, HEX_W, HEX_H, HEX_GAP, COLOR_TILE, COLOR_EMPTY } from "./constants/game";
+import { ROW_COUNTS, HEX_W, HEX_H, HEX_GAP, COLOR_TILE, COLOR_EMPTY, START_TILE_NUM } from "./constants/game";
 import type { Coord, TileMap, TileAnim } from "./types/game";
 import {
   keyOf,
@@ -25,10 +31,17 @@ import StartOverlay from "./componenets/overlays/StartOverlay";
 import GameOverModal from "./componenets/overlays/GameOverModal";
 import ScoreBoard from "./componenets/hud/ScoreBoard";
 import HexGrid from "./componenets/grid/HexGrid";
+import { saveHighScoreIfGreater, loadHighScore } from "./utils/highScore";
 
 export default function App() {
   const [score, setScore] = useState(0);
-  const [level, setLevel] = useState(1);
+  const [highScore, setHighScore] = useState(0);
+
+  const level = calcLevel(score);
+  const spawnInterval = calcSpawnInterval(level);
+
+
+  
 
   const [selectedCoords, setSelectedCoords] = useState<Coord[]>([]);
   const [tileData, setTileData] = useState<TileMap>({});
@@ -53,6 +66,41 @@ export default function App() {
   const animsRef = useRef<Record<string, TileAnim>>({});
   const [burstIds, setBurstIds] = useState<Record<string, true>>({});
   const [penaltyIds, setPenaltyIds] = useState<Record<string, true>>({});
+
+  const highWobble = useRef(new Animated.Value(0)).current;
+
+  const scoreRef = useRef<number>(0);
+  const spawnIntervalRef = useRef<number>(BASE_SPAWN_MS);
+
+  useEffect(() => {
+    (async () => {
+        const hs = await loadHighScore();
+        setHighScore(hs);
+    })();
+    }, []);
+
+
+    useEffect(() => {
+      scoreRef.current = score;
+
+      const lv = calcLevel(score);
+      const ms = calcSpawnInterval(lv);
+
+      spawnIntervalRef.current = ms;
+      updateSpawnSpeedText(lv);
+    }, [score]);
+
+
+  useEffect(() => {
+    setHighScore((hs) => {
+        if (score > hs) {
+        playHighWobble();   
+        saveHighScoreIfGreater(score);
+        return score;
+        }
+        return hs; });
+    }, [score]);
+
 
   function ensureAnim(id: string) {
     if (!animsRef.current[id]) {
@@ -88,9 +136,20 @@ export default function App() {
     }).start();
   }
 
-  function getSpawnSpeed(lv: number) {
-    return Math.max(1300, (5000 - (lv - 1) * 400) * 0.85);
-  }
+  const useNative = Platform.OS !== "web";
+
+    function playHighWobble() {
+    highWobble.stopAnimation();
+    highWobble.setValue(0);
+
+    Animated.sequence([
+        Animated.timing(highWobble, { toValue: -0.7, duration: 80, useNativeDriver: useNative }),
+        Animated.timing(highWobble, { toValue:  0.7, duration: 140, useNativeDriver: useNative }),
+        Animated.timing(highWobble, { toValue:  0,   duration: 80, useNativeDriver: useNative }),
+        ]).start();
+    }
+
+
 
   function updateSpawnSpeedText(lv: number) {
     let t = "Normal";
@@ -106,11 +165,15 @@ export default function App() {
     setMessageClass(cls);
   }
 
-  function triggerGameOver() {
-    if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
-    rafIdRef.current = null;
-    setGameOverVisible(true);
-  }
+  async function triggerGameOver() {
+        if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+
+        await saveHighScoreIfGreater(highScore); // ✅ 실시간 highScore를 저장
+        setGameOverVisible(true);
+    }
+
+
 
   function checkBoardStatus(nextMap: TileMap) {
     if (checkGameOver(nextMap)) {
@@ -118,6 +181,7 @@ export default function App() {
       triggerGameOver();
     }
   }
+
 
   function clearSelectionWithAnim(coords: Coord[]) {
     coords.forEach((c) => animateSelectOut(idOf(c.r, c.c)));
@@ -251,17 +315,6 @@ export default function App() {
     });
   }
 
-  function updateLevel(nextScore: number) {
-    const newLevel = Math.floor(nextScore / 200) + 1;
-    setLevel((prevLv) => {
-      if (newLevel !== prevLv) {
-        updateSpawnSpeedText(newLevel);
-        showMessage(`LEVEL UP! 속도가 빨라집니다!`, "purple");
-      }
-      return newLevel;
-    });
-  }
-
   function burstTiles(pairSnapshot: [Coord, Coord]) {
     if (!isValidPair(pairSnapshot)) return;
 
@@ -273,7 +326,7 @@ export default function App() {
 
     const nextScore = score + 20;
     setScore(nextScore);
-    updateLevel(nextScore);
+    const level = calcLevel(score);
 
     showMessage("GREAT! 10 성공!", "green");
 
@@ -352,7 +405,6 @@ export default function App() {
 
     setGameOverVisible(false);
     setScore(0);
-    setLevel(1);
     setSpawnProgress(0);
     updateSpawnSpeedText(1);
 
@@ -375,7 +427,7 @@ export default function App() {
 
     setTileData(base);
 
-    setTimeout(() => spawnNumbers(8), 0);
+    setTimeout(() => spawnNumbers(START_TILE_NUM), 0);
 
     lastTsRef.current = (global as any)?.performance?.now?.() ?? Date.now();
     const loop = (ts: number) => {
@@ -385,7 +437,7 @@ export default function App() {
       const delta = ts - last;
       lastTsRef.current = ts;
 
-      const speed = getSpawnSpeed(level);
+      const speed = spawnIntervalRef.current;
       setSpawnProgress((p) => {
         let next = p + (delta / speed) * 100;
 
@@ -435,7 +487,7 @@ export default function App() {
 
     const existingIdx = selectedCoords.findIndex((x) => x.r === r && x.c === c);
     if (existingIdx > -1) {
-      // ✅ 해제
+
       animateSelectOut(id);
 
       const nextSel = [...selectedCoords];
@@ -449,7 +501,6 @@ export default function App() {
 
     if (selectedCoords.length >= 2) return;
 
-    // ✅ 선택
     animateSelectIn(id);
 
     const nextSel = [...selectedCoords, { r, c }];
@@ -501,9 +552,13 @@ export default function App() {
     }
   }
 
+  
+
   // --- Minimal self-tests (console only) ---
   useEffect(() => {
+    
     try {
+        
       console.assert(isValidCoord({ r: 0, c: 0 }) === true, "T1 isValidCoord failed");
       console.assert(isValidCoord({ r: 0 }) === false, "T2 isValidCoord should fail");
       console.assert(isValidPair([{ r: 0, c: 0 }, { r: 0, c: 1 }]) === true, "T3 isValidPair failed");
@@ -573,6 +628,8 @@ export default function App() {
           <ScoreBoard
             level={level}
             score={score}
+            highScore={highScore} 
+            highWobble={highWobble}
             spawnSpeedText={spawnSpeedText}
             spawnProgress={spawnProgress}
             sum={sum}
