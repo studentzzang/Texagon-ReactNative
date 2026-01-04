@@ -17,8 +17,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e2e8f0",
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
-    height:"90%",
+  
   },
   gameContainer: {
     position: "relative",
@@ -27,7 +26,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignSelf: "center",
     width: "95%",
-    minHeight:"90%",
+    
 
     ...Platform.select({
       ios: {
