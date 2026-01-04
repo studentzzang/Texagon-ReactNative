@@ -24,15 +24,9 @@ export default function StartOverlay({
       </Pressable>
 
       <Text
-        style={{
-          marginTop: 20,       
-          fontSize: 14,
-          fontWeight: "700",
-          color: "#64748b",
-          fontFamily: "Pretendard",
-        }}
+        style={[styles.finalScore , {paddingTop: "4%"}]}
       >
-        최고 점수 {highScore.toLocaleString()}
+        최고 점수 <Text style={styles.scoreOrange}>{highScore.toLocaleString()}</Text> 
       </Text>
     </View>
   );

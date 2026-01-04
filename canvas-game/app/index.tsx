@@ -621,7 +621,7 @@ export default function App() {
       <View style={styles.body}>
         <View style={styles.gameContainer}>
           {startOverlayVisible && (
-            <StartOverlay startGame={startGame} styles={styles} />
+            <StartOverlay startGame={startGame} styles={styles} highScore={highScore} />
           )}
 
           {gameOverVisible && (
@@ -662,7 +662,7 @@ export default function App() {
 
           <View style={styles.footerWrap}>
             <Text style={styles.footerPill}>
-              10 완성 시 빈 타일 추가 생성 없음! 보드를 비워 공간을 확보하세요.
+              10을 만들면 타일이 사라져요! 보드를 비워 공간을 확보하세요.
             </Text>
           </View>
         </View>
