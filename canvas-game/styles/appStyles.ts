@@ -1,22 +1,34 @@
-import { Platform, StyleSheet } from "react-native";
+import { Platform, StyleSheet, Dimensions, PixelRatio } from "react-native";
 import { COLOR_BG_GRID, HEX_GAP, HEX_H, HEX_W } from "../constants/game";
 
+const { width: SW } = Dimensions.get("window");
+const rpx = (v: number) => PixelRatio.roundToNearestPixel(v);
+
+// 10~18dp 정도 
+const GRID_PAD = rpx(Math.max(10, Math.min(18, SW * 0.04))) + 12;
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#e2e8f0" },
+  safe: { 
+    flex: 1, 
+    backgroundColor: "#e2e8f0" 
+  },
   body: {
     flex: 1,
     backgroundColor: "#e2e8f0",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    height:"90%",
   },
   gameContainer: {
     position: "relative",
-    padding: 30,
+    padding: 16,
     backgroundColor: "#ffffff",
     borderRadius: 32,
-    maxWidth: "95%",
+    alignSelf: "center",
+    width: "95%",
+    minHeight:"90%",
+
     ...Platform.select({
       ios: {
         shadowColor: "rgba(0,0,0,1)",
@@ -130,7 +142,6 @@ const styles = StyleSheet.create({
   scoreBlue: { color: "#2563eb", fontWeight: "900", fontFamily: "Pretendard" },
   scoreOrange: { color: "#f97316", fontWeight: "900", fontFamily: "Pretendard" },
 
-
   statusContainer: { width: "100%", marginTop: 8, marginBottom: 0 },
   statusRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
   statusLeft: {
@@ -194,18 +205,28 @@ const styles = StyleSheet.create({
 
   gridContainer: {
     alignItems: "center",
-    gap: 2 as any,
+    width: "100%",
     marginTop: 10,
-    padding: 25,
+    paddingVertical: GRID_PAD,
+    paddingHorizontal: GRID_PAD  , 
     backgroundColor: COLOR_BG_GRID,
     borderRadius: 24,
-    overflow: "visible",
+    overflow: "hidden",
   },
-  hexRow: { flexDirection: "row", justifyContent: "center", columnGap: HEX_GAP },
-  hexRowOverlap: { marginBottom: -16 }, //세로 행 마진
-  hexWrapper: { width: HEX_W, height: HEX_H },
+  
+  hexRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    paddingHorizontal: 30,
+  },
+  hexRowOverlap: {   marginBottom: -Math.round(HEX_H * 0.08) -2, },
+  
+  hexWrapper: {
+    width: HEX_W,
+    height: HEX_H,
+  },
   hexPress: { width: HEX_W, height: HEX_H },
-  hexSvg: { width: HEX_W, height: HEX_H },
+  hexSvg: { width: "100%", height: "100%" },
   hexTextWrap: {
     position: "absolute",
     left: 0, top: 0, right: 0, bottom: 0,
@@ -213,7 +234,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   hexText: {
-    fontSize: 26,
+    fontSize: HEX_W * 0.45,
     fontWeight: "900",
     fontFamily: "Pretendard",
     includeFontPadding: false,
@@ -221,7 +242,7 @@ const styles = StyleSheet.create({
   },
   hexTextSelected: { color: "#fff" },
 
-  footerWrap: { marginTop: 32, alignItems: "center", gap: 16 as any },
+  footerWrap: { marginTop: 32, alignItems: "center", gap: 16 },
   footerPill: {
     fontSize: 11,
     color: "#64748b",

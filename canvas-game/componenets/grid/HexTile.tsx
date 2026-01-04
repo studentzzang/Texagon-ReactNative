@@ -19,6 +19,7 @@ export default function HexTile({
   hexPoints,
   HEX_W,
   HEX_H,
+  HEX_GAP,
   tileOpacity,
   handleTilePress,
   styles,
@@ -38,6 +39,7 @@ export default function HexTile({
   hexPoints: string;
   HEX_W: number;
   HEX_H: number;
+  HEX_GAP: number;
   tileOpacity: number;
   handleTilePress: (r: number, c: number) => void;
   styles: any;
@@ -45,7 +47,11 @@ export default function HexTile({
   const wrapperStyle = [
     styles.hexWrapper,
     { opacity: tileOpacity },
+    // ✅ row gap/columnGap 대신 타일 자체 margin으로 간격 고정
+    { marginHorizontal: Math.round(HEX_GAP / 2) },
   ];
+
+  const scale = Animated.multiply(Animated.multiply(a.scale, a.selScale), baseScale);
 
   return (
     <View style={wrapperStyle}>
@@ -56,15 +62,20 @@ export default function HexTile({
       >
         <Animated.View
           style={{
+            // ✅ 레이아웃 박스 고정 (안드 흔들림 방지 핵심)
+            width: HEX_W,
+            height: HEX_H,
+            alignItems: "center",
+            justifyContent: "center",
+
             transform: [
               { translateX: a.tx },
-              { scale: Animated.multiply(Animated.multiply(a.scale, a.selScale), baseScale) },
+              { scale },
             ],
             opacity: a.opacity,
           }}
         >
           <Svg width={HEX_W} height={HEX_H} style={styles.hexSvg}>
-
             {st !== "empty" && !sel && (
               <Polygon
                 points={hexPoints}
@@ -85,8 +96,15 @@ export default function HexTile({
           </Svg>
 
           <View style={styles.hexTextWrap}>
-            <Text selectable={false} style={[styles.hexText, { color: textColor }, sel && styles.hexTextSelected]}>
-              {typeof value === "number" ? String(value) : ""} 
+            <Text
+              selectable={false}
+              style={[
+                styles.hexText,
+                { color: textColor },
+                sel && styles.hexTextSelected,
+              ]}
+            >
+              {typeof value === "number" ? String(value) : ""}
             </Text>
           </View>
         </Animated.View>
