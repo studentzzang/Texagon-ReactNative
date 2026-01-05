@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Texagon",
-    "slug": "Texagon",
+    "slug": "canvas-game",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
