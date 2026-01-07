@@ -20,7 +20,7 @@ DerivedData
 *.hmap
 *.ipa
 *.xcuserstate
-
+.env
 # Expo
 .expo/
 expo-env.d.ts
@@ -63,3 +63,4 @@ buck-out/
 /ios/Pods/
 canvas-game/.expo/types/router.d.ts
 canvas-game/.expo/types/router.d.ts
+.env
