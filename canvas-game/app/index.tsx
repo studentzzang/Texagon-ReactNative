@@ -34,6 +34,7 @@ import ScoreBoard from "../componenets/hud/ScoreBoard";
 import HexGrid from "../componenets/grid/HexGrid";
 import { saveHighScoreIfGreater, loadHighScore } from "../utils/highScore";
 import PauseOverlay from "../componenets/overlays/PauseOverlay";
+import SoundManager from "../sfx/SoundManager";
 
 export default function App() {
   const [score, setScore] = useState(0);
@@ -102,6 +103,14 @@ export default function App() {
         }
         return hs; });
     }, [score]);
+
+    useEffect(() => {
+      SoundManager.init();
+      return () => {
+        SoundManager.unloadAll();
+      };
+    }, []);
+
 
 
   function ensureAnim(id: string) {
@@ -328,6 +337,9 @@ export default function App() {
 
     const ids = pairSnapshot.map((c) => idOf(c.r, c.c));
     animateBurst(ids);
+
+    //소리 재생
+    SoundManager.playSuccessPop();
 
     const nextScore = score + 20;
     setScore(nextScore);
