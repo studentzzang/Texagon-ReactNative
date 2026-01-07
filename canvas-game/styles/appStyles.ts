@@ -144,17 +144,17 @@ const styles = StyleSheet.create({
   statusContainer: { width: "100%", marginTop: 8, marginBottom: 0 },
   statusRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
   statusLeft: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#717c8bff",
     textTransform: "uppercase",
     letterSpacing: -0.5,
     fontFamily: "Pretendard",
   },
   statusRight: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#717c8bff",
     textTransform: "uppercase",
     letterSpacing: -0.5,
     fontFamily: "Pretendard",
@@ -254,15 +254,22 @@ const styles = StyleSheet.create({
     fontFamily: "Pretendard",
   },
 
-    pauseOverlay: {
+  pauseOverlay: {
     position: "absolute",
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    zIndex: 80,
-    borderRadius: 32,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+
+    backgroundColor: "rgba(255,255,255,0.92)", // 시작하기처럼 흐림
+    zIndex: 9999,
+    elevation: 9999, // android
+
+    borderRadius: 32, // gameContainer랑 동일하게
     alignItems: "center",
     justifyContent: "center",
   },
+
   pauseTitle: {
     fontSize: 34,
     fontWeight: "900",

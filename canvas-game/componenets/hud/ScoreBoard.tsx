@@ -26,10 +26,7 @@ export default function ScoreBoard({
 }) {
   return (
     <View style={styles.scoreBoard}>
-      <View style={styles.topRow}>
-        <Text style={styles.topRowText}>
-          Lv.<Text style={styles.topRowText}>{level}</Text>
-        </Text>
+      <View style={{ alignItems: "flex-end", marginLeft: "auto" }}>
 
         <View style={{ alignItems: "flex-end" }}>
           <View style={{ flexDirection: "row", alignItems: "baseline" }}>
@@ -65,7 +62,8 @@ export default function ScoreBoard({
 
       <View style={styles.statusContainer}>
         <View style={styles.statusRow}>
-          <Text style={styles.statusLeft}>Next Tile Spawn</Text>
+          <Text style={styles.statusLeft}>Lv. {level}</Text>
+
           <Text style={styles.statusRight}>{spawnSpeedText}</Text>
         </View>
         <View style={styles.progressBarBg}>
