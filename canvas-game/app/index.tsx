@@ -8,7 +8,7 @@ import {
   View,
   Platform,
   Text,
-  
+  Pressable,
   Animated,
   Easing,
 } from "react-native";
@@ -33,6 +33,7 @@ import GameOverModal from "../componenets/overlays/GameOverModal";
 import ScoreBoard from "../componenets/hud/ScoreBoard";
 import HexGrid from "../componenets/grid/HexGrid";
 import { saveHighScoreIfGreater, loadHighScore } from "../utils/highScore";
+import PauseOverlay from "../componenets/overlays/PauseOverlay";
 
 export default function App() {
   const [score, setScore] = useState(0);
@@ -70,6 +71,8 @@ export default function App() {
 
   const scoreRef = useRef<number>(0);
   const spawnIntervalRef = useRef<number>(BASE_SPAWN_MS);
+
+  const [pauseVisible, setPauseVisible] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -620,6 +623,7 @@ export default function App() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.body}>
         <View style={styles.gameContainer}>
+          
           {startOverlayVisible && (
             <StartOverlay startGame={startGame} styles={styles} highScore={highScore} />
           )}
@@ -640,6 +644,31 @@ export default function App() {
             msgColorStyle={msgColorStyle}
             styles={styles}
           />
+
+          {!startOverlayVisible && !gameOverVisible && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.pauseButton,
+                pressed && { transform: [{ scale: 0.95 }] },
+              ]}
+              onPress={() => setPauseVisible(true)}
+            >
+              <View style={styles.pauseIcon}>
+                <View style={styles.pauseBar} />
+                <View style={styles.pauseBar} />
+              </View>
+            </Pressable>
+          )}
+          {pauseVisible && (
+            <PauseOverlay
+              styles={styles}
+              onResume={() => setPauseVisible(false)}
+              onRestart={() => {
+                setPauseVisible(false);
+                initGame(); // reset 없어도 OK: 너 코드에 이미 있음 :contentReference[oaicite:2]{index=2}
+              }}
+            />
+          )}
 
           <HexGrid
             ROW_COUNTS={ROW_COUNTS}

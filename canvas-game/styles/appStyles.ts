@@ -253,6 +253,89 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: "Pretendard",
   },
+
+    pauseOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    zIndex: 80,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pauseTitle: {
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#1e293b",
+    marginBottom: 18,
+    fontFamily: "Pretendard",
+  },
+
+  pausePrimaryBtn: {
+    paddingHorizontal: 40,
+    paddingVertical: 16,
+    backgroundColor: "#2563eb",
+    borderRadius: 24,
+    transform: [{ scale: 1 }],
+    marginBottom: 12,
+  },
+  pausePrimaryBtnPressed: {
+    backgroundColor: "#1d4ed8",
+    transform: [{ scale: 0.95 }],
+  },
+  pausePrimaryText: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    fontFamily: "Pretendard",
+  },
+
+  pauseSecondaryBtn: {
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+    backgroundColor: "#e2e8f0",
+    borderRadius: 24,
+    transform: [{ scale: 1 }],
+  },
+  pauseSecondaryBtnPressed: {
+    backgroundColor: "#cbd5e1",
+    transform: [{ scale: 0.95 }],
+  },
+  pauseSecondaryText: {
+    color: "#0f172a",
+    fontSize: 20,
+    fontWeight: "900",
+    fontFamily: "Pretendard",
+  },
+
+  pauseButton: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    zIndex: 60,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.75)",
+    ...Platform.select({
+      ios: {
+        shadowColor: "rgba(0,0,0,1)",
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
+  },
+  pauseIcon: { flexDirection: "row", columnGap: 8 },
+  pauseBar: {
+    width: 7,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: "#0f172a",
+  },
+
 });
 
 export default styles;
