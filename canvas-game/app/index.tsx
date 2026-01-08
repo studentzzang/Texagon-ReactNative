@@ -75,6 +75,89 @@ export default function App() {
 
   const [pauseVisible, setPauseVisible] = useState(false);
 
+  const usedReviveRef = useRef(false);
+
+  function reviveGame() {
+    if (usedReviveRef.current) return; // 1판 1회 부활
+    usedReviveRef.current = true;
+
+    // 1) 모달/상태 해제
+    gameOverRef.current = false;
+    setGameOverVisible(false);
+    setPauseVisible(false);
+
+    // 2) 선택/메시지 초기화(버그 방지)
+    setSelectedCoords([]);
+    setSum(0);
+    setSpawnProgress(0);
+    setBurstIds({});
+    setPenaltyIds({});
+
+    // 3) 타일 12개만 남기기 (현재 타일 중에서 랜덤으로 12개 유지)
+    setTileData((prev) => {
+      const activeKeys = Object.keys(prev).filter((k) => prev[k] !== null);
+      if (activeKeys.length <= 12) return prev;
+
+      const shuffled = [...activeKeys].sort(() => 0.5 - Math.random());
+      const keep = new Set(shuffled.slice(0, 12));
+
+      const next: TileMap = { ...prev };
+      for (const k of activeKeys) {
+        if (!keep.has(k)) next[k] = null;
+      }
+      return next;
+    });
+
+    // 4) 루프 다시 켜기 (initGame의 loop 부분만 재시작)
+    if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
+    rafIdRef.current = null;
+
+    lastTsRef.current = (global as any)?.performance?.now?.() ?? Date.now();
+
+    const loop = (ts: number) => {
+      if (gameOverRef.current) return;
+
+      const last = lastTsRef.current;
+      const delta = ts - last;
+      lastTsRef.current = ts;
+
+      const speed = spawnIntervalRef.current;
+      setSpawnProgress((p) => {
+        let next = p + (delta / speed) * 100;
+
+        if (next >= 100) {
+          next = 0;
+          // 스폰 로직은 initGame의 loop랑 동일하게 유지
+          setTileData((prev) => {
+            const emptyCount = Object.values(prev).filter((v) => v === null).length;
+            if (emptyCount > 0) {
+              const emptyKeys = Object.keys(prev).filter((k) => prev[k] === null);
+              const shuffled = [...emptyKeys].sort(() => 0.5 - Math.random());
+              const pick = shuffled[0];
+              const [r, c] = pick.split(",").map(Number);
+              const val = Math.floor(Math.random() * 9) + 1;
+
+              const nextMap: TileMap = { ...prev, [pick]: val };
+              animatePop(idOf(r, c));
+              setTimeout(() => checkBoardStatus(nextMap), 0);
+              return nextMap;
+            } else {
+              setGameOverReason("보드가 가득 찼습니다!");
+              triggerGameOver();
+              return prev;
+            }
+          });
+        }
+        return next;
+      });
+
+      rafIdRef.current = requestAnimationFrame(loop);
+    };
+
+    rafIdRef.current = requestAnimationFrame(loop);
+  }
+
+
   useEffect(() => {
     (async () => {
         const hs = await loadHighScore();
@@ -183,7 +266,7 @@ export default function App() {
 
         gameOverRef.current = true;  
 
-        await saveHighScoreIfGreater(highScore); // ✅ 실시간 highScore를 저장
+        await saveHighScoreIfGreater(highScore);
         setGameOverVisible(true);
     }
 
@@ -417,7 +500,7 @@ export default function App() {
 
   function initGame() {
     gameOverRef.current = false;   
-
+    usedReviveRef.current = false;
     if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
     rafIdRef.current = null;
 
@@ -641,7 +724,14 @@ export default function App() {
           )}
 
           {gameOverVisible && (
-            <GameOverModal gameOverReason={gameOverReason} score={score} initGame={initGame} styles={styles} />
+            <GameOverModal
+              gameOverReason={gameOverReason}
+              score={score}
+              initGame={initGame}
+              reviveGame={reviveGame}
+              usedRevive={usedReviveRef.current}
+              styles={styles}
+            />
           )}
 
           <ScoreBoard

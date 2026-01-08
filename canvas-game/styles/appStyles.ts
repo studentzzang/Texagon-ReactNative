@@ -100,11 +100,12 @@ const styles = StyleSheet.create({
   },
   finalScoreNum: { fontWeight: "900", fontFamily: "Pretendard" },
   retryBtn: {
-    paddingHorizontal: 32,
+    paddingHorizontal:24,
     paddingVertical: 12,
     backgroundColor: "#2563eb",
     borderRadius: 24,
     transform: [{ scale: 1 }],
+    alignItems:"center",
   },
   retryBtnPressed: {
     backgroundColor: "#1d4ed8",
@@ -276,6 +277,13 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     marginBottom: 18,
     fontFamily: "Pretendard",
+  },
+
+  btnGroup: {
+    width: 160,          // ← 여기서 둘 다 동일
+    alignSelf: "center",
+    marginTop: 16,
+    textAlign:"center",
   },
 
   pausePrimaryBtn: {
