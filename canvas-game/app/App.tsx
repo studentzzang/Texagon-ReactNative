@@ -40,9 +40,8 @@ export default function App() {
   const level = calcLevel(score);
   const spawnInterval = calcSpawnInterval(level);
 
-
+  const gameOverRef = useRef(false);
   
-
   const [selectedCoords, setSelectedCoords] = useState<Coord[]>([]);
   const [tileData, setTileData] = useState<TileMap>({});
 
@@ -71,6 +70,10 @@ export default function App() {
 
   const scoreRef = useRef<number>(0);
   const spawnIntervalRef = useRef<number>(BASE_SPAWN_MS);
+
+  useEffect(() => {
+    gameOverRef.current = gameOverVisible;
+  }, [gameOverVisible]);
 
   useEffect(() => {
     (async () => {
@@ -168,6 +171,8 @@ export default function App() {
   async function triggerGameOver() {
         if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
+
+        gameOverRef.current = true;    
 
         await saveHighScoreIfGreater(highScore); // ✅ 실시간 highScore를 저장
         setGameOverVisible(true);
@@ -403,6 +408,7 @@ export default function App() {
     if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
     rafIdRef.current = null;
 
+    gameOverRef.current = false; 
     setGameOverVisible(false);
     setScore(0);
     setSpawnProgress(0);
@@ -431,7 +437,7 @@ export default function App() {
 
     lastTsRef.current = (global as any)?.performance?.now?.() ?? Date.now();
     const loop = (ts: number) => {
-      if (gameOverVisible) return;
+      if (gameOverRef.current) return;
 
       const last = lastTsRef.current;
       const delta = ts - last;
@@ -614,7 +620,9 @@ export default function App() {
   }
 
   return (
+    
     <SafeAreaView style={styles.safe}>
+
       <View style={styles.body}>
         <View style={styles.gameContainer}>
           {startOverlayVisible && (

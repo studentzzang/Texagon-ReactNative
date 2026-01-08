@@ -4,7 +4,7 @@
     "slug": "canvas-game",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/favicon.png",
     "scheme": "canvasgame",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -23,7 +23,17 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+
+      "head": {
+        "script": [
+          {
+            "src": "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9617795046773959",
+            "async": true,
+            "crossorigin": "anonymous"
+          }
+        ]
+      }
     },
     "plugins": [
       "expo-router",
