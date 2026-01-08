@@ -7,7 +7,7 @@ export const BASE_SPAWN_MS = 2600;
 export const SPAWN_DECREASE_PER_LEVEL = 150;
 
 /** (선택) 너무 빨라지는 것 방지용 최소 스폰 간격 (ms) */
-export const MIN_SPAWN_MS = 600;
+export const MIN_SPAWN_MS = 1200;
 
 /** 레벨 업에 필요한 점수 단위 (UI / 표시용) */
 export const STEP_LEVEL = 60;
