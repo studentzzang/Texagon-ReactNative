@@ -29,6 +29,16 @@ const styles = StyleSheet.create({
     }),
   },
 
+  gameTitle: {
+    fontSize: 54,
+    fontWeight: "400",
+    letterSpacing: 1.4,
+    color: "#0f172a", // slate-900
+    top:-40,
+    textAlign: "center",
+    fontFamily:"Open Sans",
+  },
+
   startOverlay: {
     position: "absolute",
     top: 0, left: 0, right: 0, bottom: 0,

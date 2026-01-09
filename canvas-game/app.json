@@ -24,7 +24,6 @@
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png",
-
       "head": {
         "script": [
           {
@@ -48,7 +47,8 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

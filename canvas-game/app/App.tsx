@@ -624,6 +624,8 @@ export default function App() {
     <SafeAreaView style={styles.safe}>
 
       <View style={styles.body}>
+        {Platform.OS==="web" && (<Text style={styles.gameTitle}>Texagon</Text>)}
+        
         <View style={styles.gameContainer}>
           {startOverlayVisible && (
             <StartOverlay startGame={startGame} styles={styles} />
@@ -671,6 +673,14 @@ export default function App() {
             </Text>
           </View>
         </View>
+        {Platform.OS === "web" && (
+          <View style={ styles.footerWrap}>
+            <Text style={styles.footerPill}>
+              © 2026 JES__STUDIO. All rights reserved.<br/>
+              studentzzang@gmail.com
+            </Text>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
