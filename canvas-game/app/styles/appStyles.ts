@@ -31,10 +31,10 @@ const styles = StyleSheet.create({
 
   gameTitle: {
     fontSize: 54,
-    fontWeight: "400",
+    fontWeight: "600",
     letterSpacing: 1.4,
     color: "#0f172a", // slate-900
-    top:-40,
+    top:-26,
     textAlign: "center",
     fontFamily:"Open Sans",
   },
@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
   },
   startBtn: {
     paddingHorizontal: 40,
-    paddingVertical: 16,
+    paddingVertical: 14,
     backgroundColor: "#2563eb",
     borderRadius: 24,
     transform: [{ scale: 1 }],
@@ -61,9 +61,24 @@ const styles = StyleSheet.create({
   },
   startBtnText: {
     color: "#fff",
-    fontSize: 24,
+    fontSize: 30,
     fontWeight: "900",
     fontFamily: "Pretendard",
+  },
+
+  guideBox: {
+    marginTop: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#e9eef1",   
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+  guideText: {
+    fontSize: 20,
+    color: "#303c4e",      
+    lineHeight: 40,
   },
 
   gameOverModal: {

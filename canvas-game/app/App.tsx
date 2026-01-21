@@ -669,7 +669,7 @@ export default function App() {
 
           <View style={styles.footerWrap}>
             <Text style={styles.footerPill}>
-              10 완성 시 빈 타일 추가 생성 없음! 보드를 비워 공간을 확보하세요.
+              No new tiles at 10! Clear the board.
             </Text>
           </View>
         </View>
