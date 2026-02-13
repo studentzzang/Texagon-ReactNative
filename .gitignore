@@ -21,6 +21,9 @@ DerivedData
 *.ipa
 *.xcuserstate
 .env
+.env*.local
+eas.json
+
 # Expo
 .expo/
 expo-env.d.ts
@@ -64,3 +67,7 @@ buck-out/
 canvas-game/.expo/types/router.d.ts
 canvas-game/.expo/types/router.d.ts
 .env
+canvas-game/eas.json
+canvas-game/eas.json
+canvas-game/eas.json
+canvas-game/eas.json

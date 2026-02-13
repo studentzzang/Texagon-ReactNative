@@ -767,7 +767,7 @@ export default function App() {
               onResume={() => setPauseVisible(false)}
               onRestart={() => {
                 setPauseVisible(false);
-                initGame(); // reset 없어도 OK: 너 코드에 이미 있음 :contentReference[oaicite:2]{index=2}
+                initGame(); 
               }}
             />
           )}
