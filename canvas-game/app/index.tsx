@@ -77,6 +77,10 @@ export default function App() {
 
   const usedReviveRef = useRef(false);
 
+  const pausedRef = useRef(false);
+  const loopRef = useRef<((ts: number) => void) | null>(null);
+
+
   function reviveGame() {
     if (usedReviveRef.current) return; // 1판 1회 부활
     usedReviveRef.current = true;
@@ -115,6 +119,12 @@ export default function App() {
     lastTsRef.current = (global as any)?.performance?.now?.() ?? Date.now();
 
     const loop = (ts: number) => {
+
+      if (pausedRef.current) {
+        lastTsRef.current = ts;
+        return;
+      }
+
       if (gameOverRef.current) return;
 
       const last = lastTsRef.current;
@@ -153,7 +163,8 @@ export default function App() {
 
       rafIdRef.current = requestAnimationFrame(loop);
     };
-
+    
+    loopRef.current = loop;
     rafIdRef.current = requestAnimationFrame(loop);
   }
 
@@ -504,6 +515,9 @@ export default function App() {
     if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
     rafIdRef.current = null;
 
+    pausedRef.current = false;
+    setPauseVisible(false);
+
     setGameOverVisible(false);
     setScore(0);
     setSpawnProgress(0);
@@ -532,6 +546,11 @@ export default function App() {
 
     lastTsRef.current = (global as any)?.performance?.now?.() ?? Date.now();
     const loop = (ts: number) => {
+
+      if (pausedRef.current) {
+        lastTsRef.current = ts;
+        return;
+      }
       if (gameOverRef.current) return;
 
       const last = lastTsRef.current;
@@ -570,6 +589,7 @@ export default function App() {
 
       rafIdRef.current = requestAnimationFrame(loop);
     };
+    loopRef.current = loop;
 
     rafIdRef.current = requestAnimationFrame(loop);
   }
@@ -657,6 +677,28 @@ export default function App() {
 
   // --- Minimal self-tests (console only) ---
   useEffect(() => {
+
+    // pause ON
+    if (pauseVisible) {
+      pausedRef.current = true;
+
+      if (rafIdRef.current != null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      return;
+    }
+
+    // pause OFF (resume)
+    if (pausedRef.current) {
+      pausedRef.current = false;
+
+      // 게임 진행 중일 때만 루프 재시작
+      if (!startOverlayVisible && !gameOverVisible && !gameOverRef.current && loopRef.current) {
+        lastTsRef.current = (global as any)?.performance?.now?.() ?? Date.now();
+        rafIdRef.current = requestAnimationFrame(loopRef.current);
+      }
+    }
     
     try {
         
@@ -669,7 +711,7 @@ export default function App() {
     } catch (e) {
       console.error("Self-tests error:", e);
     }
-  }, []);
+  }, [pauseVisible, startOverlayVisible, gameOverVisible]);
 
   const msgColorStyle = useMemo(() => {
     switch (messageClass) {

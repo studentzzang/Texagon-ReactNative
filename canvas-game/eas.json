@@ -6,16 +6,40 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_ADMOB_REWARD_UNIT_ID":"ca-app-pub-9617795046773959/1800558366",
+
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID":"ca-app-pub-9617795046773959/4966047251",
+
+        "EXPO_PUBLIC_ADMOB_APP_ID":"ca-app-pub-9617795046773959~8909161698",
+      }
     },
     "preview": {
       "distribution": "internal",
       "android" : {
-        "buildType" : "apk"
+        "buildType" : "app-bundle"
+      },
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_ADMOB_REWARD_UNIT_ID":"ca-app-pub-9617795046773959/1800558366",
+
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID":"ca-app-pub-9617795046773959/4966047251",
+
+        "EXPO_PUBLIC_ADMOB_APP_ID":"ca-app-pub-9617795046773959~8909161698",
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_ADMOB_REWARD_UNIT_ID":"ca-app-pub-9617795046773959/1800558366",
+
+        "EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID":"ca-app-pub-9617795046773959/4966047251",
+
+        "EXPO_PUBLIC_ADMOB_APP_ID":"ca-app-pub-9617795046773959~8909161698",
+      }
     }
   },
   "submit": {
